@@ -1,88 +1,41 @@
-import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { test, expect, type Locator, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { Studio } from './helpers'
 
-const MAIN = resolve(__dirname, '../../out/main/index.js')
-
-let app: ElectronApplication
+const s = new Studio()
 let page: Page
 let dir: string
 let surface: Locator
 
-async function stubFolderDialog(folder: string): Promise<void> {
-  await app.evaluate(({ dialog }, f) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] })
-  }, folder)
-}
-
-const node = (id: string): Locator => page.locator(`[data-node-id="${id}"]`)
-const palette = (type: string): Locator => page.locator('.palette-item', { hasText: new RegExp(`^${type}$`) })
-
-async function geometry(id: string): Promise<{ x: number; y: number; w: number; h: number }> {
-  return node(id).evaluate((el) => {
-    const e = el as HTMLElement
-    return { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }
-  })
-}
-
-/** Arrasta com o mouse de um ponto a outro, passo a passo (para disparar os movimentos). */
-async function mouseDrag(from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
-  await page.mouse.move(from.x, from.y)
-  await page.mouse.down()
-  await page.mouse.move(to.x, to.y, { steps: 8 })
-  await page.mouse.up()
-}
-
-async function center(l: Locator): Promise<{ x: number; y: number }> {
-  const b = (await l.boundingBox())!
-  return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
-}
-
-/** Espera o layout parar de mudar (os painéis se ajustam logo após a partida a frio). */
-async function settled(l: Locator): Promise<void> {
-  let prev = ''
-  await expect
-    .poll(
-      async () => {
-        const now = JSON.stringify(await l.boundingBox())
-        const same = now === prev
-        prev = now
-        return same
-      },
-      { intervals: [150, 150, 150, 150], timeout: 10_000 }
-    )
-    .toBe(true)
-}
+const node = (id: string): Locator => s.node(id)
+const palette = (type: string): Locator => s.palette(type)
+const geometry = (id: string): ReturnType<Studio['geometry']> => s.geometry(id)
+const mouseDrag = (a: { x: number; y: number }, b: { x: number; y: number }): Promise<void> => s.mouseDrag(a, b)
+const center = Studio.center
+const dropFrom = (type: string, target: Locator, pos: { x: number; y: number }): Promise<void> =>
+  s.dropFrom(type, target, pos)
 
 test.beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'vform-canvas-'))
-  app = await electron.launch({ args: [MAIN] })
-  page = await app.firstWindow()
-  await page.waitForSelector('.welcome')
-  await stubFolderDialog(dir)
-  await page.getByRole('button', { name: 'Novo projeto' }).click()
-  surface = page.getByTestId('surface')
-  await expect(surface).toBeVisible()
-  await settled(surface)
+  await s.start()
+  ;({ page, dir, surface } = s)
 })
 
 test.afterEach(async () => {
-  await app.close()
-  await rm(dir, { recursive: true, force: true })
+  await s.stop()
 })
 
 test('arrastar da paleta cria o componente com ID automático, encaixado na grade', async () => {
   // Coordenadas longe do meio da célula da grade (8px), para o arredondamento ser estável.
-  await palette('Button').dragTo(surface, { targetPosition: { x: 102, y: 62 } })
+  await dropFrom('Button', surface, { x: 102, y: 62 })
 
   await expect(node('button1')).toBeVisible()
   expect(await geometry('button1')).toEqual({ x: 104, y: 64, w: 96, h: 30 })
   await expect(node('button1')).toHaveClass(/selected/)
   await expect(page.getByTestId('tree-button1')).toBeVisible()
-  await expect(page.getByTestId('properties')).toContainText('button1')
+  await expect(page.getByTestId('prop-id')).toHaveValue('button1')
 
-  await palette('Button').dragTo(surface, { targetPosition: { x: 302, y: 202 } })
+  await dropFrom('Button', surface, { x: 302, y: 202 })
   await expect(node('button2')).toBeVisible()
 
   // Dois cliques na paleta também adicionam.
@@ -91,7 +44,7 @@ test('arrastar da paleta cria o componente com ID automático, encaixado na grad
 })
 
 test('mover, redimensionar, desfazer e refazer', async () => {
-  await palette('Button').dragTo(surface, { targetPosition: { x: 102, y: 62 } })
+  await dropFrom('Button', surface, { x: 102, y: 62 })
   const start = await geometry('button1')
 
   // Mover +50,+30 → encaixa em (152, 96).
@@ -121,7 +74,7 @@ test('mover, redimensionar, desfazer e refazer', async () => {
 })
 
 test('o arraste fica preso ao canvas e bloqueia arraste nativo (não "solta" após poucos pixels)', async () => {
-  await palette('Button').dragTo(surface, { targetPosition: { x: 102, y: 62 } })
+  await dropFrom('Button', surface, { x: 102, y: 62 })
   const hasCapture = (): Promise<boolean> =>
     page.evaluate(() => (document.querySelector('[data-testid="surface"]') as HTMLElement).hasPointerCapture(1))
 
@@ -145,17 +98,17 @@ test('o arraste fica preso ao canvas e bloqueia arraste nativo (não "solta" ap�
 })
 
 test('soltar no Panel e arrastar para dentro dele muda o pai e mantém a posição', async () => {
-  await palette('Panel').dragTo(surface, { targetPosition: { x: 302, y: 202 } })
-  await palette('Label').dragTo(node('panel1'), { targetPosition: { x: 22, y: 22 } })
-  await expect(page.locator('[data-node-id="panel1"] > [data-node-id="label1"]')).toBeVisible()
+  await dropFrom('Panel', surface, { x: 302, y: 202 })
+  await dropFrom('Label', node('panel1'), { x: 22, y: 22 })
+  await expect(page.locator('[data-node-id="panel1"] > .children-layer > [data-node-id="label1"]')).toBeVisible()
   expect(await geometry('label1')).toMatchObject({ x: 24, y: 24 })
 
   // Botão solto no formulário e depois arrastado para dentro do painel.
-  await palette('Button').dragTo(surface, { targetPosition: { x: 42, y: 42 } })
+  await dropFrom('Button', surface, { x: 42, y: 42 })
   await expect(page.locator('.form-surface > [data-node-id="button1"]')).toBeVisible()
   const target = await center(node('panel1'))
   await mouseDrag(await center(node('button1')), target)
-  await expect(page.locator('[data-node-id="panel1"] > [data-node-id="button1"]')).toBeVisible()
+  await expect(page.locator('[data-node-id="panel1"] > .children-layer > [data-node-id="button1"]')).toBeVisible()
   await expect(page.getByTestId('tree-button1')).toBeVisible()
 
   // Arrastar de volta para fora do painel.
@@ -165,7 +118,7 @@ test('soltar no Panel e arrastar para dentro dele muda o pai e mantém a posiç�
 
   // Desfazer o último gesto devolve o botão ao painel numa só ação.
   await page.keyboard.press('Control+z')
-  await expect(page.locator('[data-node-id="panel1"] > [data-node-id="button1"]')).toBeVisible()
+  await expect(page.locator('[data-node-id="panel1"] > .children-layer > [data-node-id="button1"]')).toBeVisible()
 })
 
 test('seleção em retângulo, duplicar com Ctrl+D e excluir com Delete', async () => {
@@ -197,8 +150,8 @@ test('seleção em retângulo, duplicar com Ctrl+D e excluir com Delete', async 
 })
 
 test('salvar e reabrir preserva os componentes', async () => {
-  await palette('Panel').dragTo(surface, { targetPosition: { x: 202, y: 102 } })
-  await palette('ComboBox').dragTo(node('panel1'), { targetPosition: { x: 18, y: 18 } })
+  await dropFrom('Panel', surface, { x: 202, y: 102 })
+  await dropFrom('ComboBox', node('panel1'), { x: 18, y: 18 })
   await page.keyboard.press('Control+s')
   await expect(page.locator('.console-line').last()).toContainText('Projeto salvo')
   await expect(page.locator('.statusbar')).toContainText('salvo')
@@ -215,6 +168,6 @@ test('salvar e reabrir preserva os componentes', async () => {
   })
 
   await page.getByRole('button', { name: 'Abrir', exact: true }).click()
-  await expect(page.locator('[data-node-id="panel1"] > [data-node-id="comboBox1"]')).toBeVisible()
+  await expect(page.locator('[data-node-id="panel1"] > .children-layer > [data-node-id="comboBox1"]')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Desfazer' })).toBeDisabled()
 })

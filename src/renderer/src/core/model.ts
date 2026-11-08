@@ -33,6 +33,7 @@ function parseNodes(value: unknown, seen: Set<string>): FormNode[] {
       props: isObject(raw.props) ? raw.props : {}
     }
     if (raw.children !== undefined) node.children = parseNodes(raw.children, seen)
+    if (raw.tab !== undefined) node.tab = num(raw.tab, `${id}.tab`)
     return node
   })
 }

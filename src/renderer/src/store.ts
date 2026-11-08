@@ -1,9 +1,29 @@
 import { create } from 'zustand'
 import type { FormDocument, LoadedProject } from '@shared/project'
-import { addNode, createNode, deleteNodes, duplicateNodes, setRects } from './core/commands'
-import { createTracked, mutate, redo as redoHistory, undo as undoHistory, type Tracked } from './core/history'
+import {
+  addNode,
+  createNode,
+  deleteNodes,
+  duplicateNodes,
+  moveToIndex,
+  renameNode,
+  setFormProps,
+  setProp,
+  setRects
+} from './core/commands'
+import {
+  createTracked,
+  followRenames,
+  mutate,
+  redo as redoHistory,
+  undo as undoHistory,
+  type HistoryEntry,
+  type Tracked
+} from './core/history'
+import { allIds, locate, topmost } from './core/tree'
+import { idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
-import { locate, topmost } from './core/tree'
+import { layoutOf } from './core/props'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -35,10 +55,14 @@ interface IdeState {
   currentDoc(): FormDocument | null
   select(ids: string[]): void
   /** Aplica uma edição; edições seguidas com o mesmo `txn` viram uma só entrada no histórico. */
-  edit(recipe: (draft: FormDocument) => void, txn?: string): void
+  edit(recipe: (draft: FormDocument) => void, txn?: string, renames?: HistoryEntry['renames']): void
   undo(): void
   redo(): void
-  addComponent(type: string, parentId: string | null, x: number, y: number): void
+  addComponent(type: string, parentId: string | null, x: number, y: number, index?: number): void
+  /** Renomeia o componente; devolve a mensagem do problema (ID inválido ou em uso) ou null se deu certo. */
+  renameComponent(id: string, newId: string): string | null
+  setProp(id: string, key: string, value: unknown, txn?: string): void
+  setFormProps(props: { title?: string; width?: number; height?: number }): void
   deleteSelection(): void
   duplicateSelection(): void
   nudgeSelection(dx: number, dy: number): void
@@ -136,11 +160,11 @@ export const useIde = create<IdeState>((set, get) => {
 
     select: (ids) => set({ selection: ids }),
 
-    edit(recipe, txn) {
+    edit(recipe, txn, renames) {
       const { activeForm, tracked } = get()
       const t = activeForm ? tracked[activeForm] : undefined
       if (!activeForm || !t) return
-      const next = mutate(t, recipe, txn)
+      const next = mutate(t, recipe, txn, renames)
       if (next !== t) set({ tracked: { ...tracked, [activeForm]: next }, dirty: true })
     },
 
@@ -148,25 +172,48 @@ export const useIde = create<IdeState>((set, get) => {
       const { activeForm, tracked, selection } = get()
       const t = activeForm ? tracked[activeForm] : undefined
       if (!activeForm || !t || t.undo.length === 0) return
+      const entry = t.undo[t.undo.length - 1]
       const next = undoHistory(t)
-      set({ tracked: { ...tracked, [activeForm]: next }, selection: pruneSelection(next.doc, selection), dirty: true })
+      const ids = pruneSelection(next.doc, followRenames(selection, entry.renames, 'undo'))
+      set({ tracked: { ...tracked, [activeForm]: next }, selection: ids, dirty: true })
     },
 
     redo() {
       const { activeForm, tracked, selection } = get()
       const t = activeForm ? tracked[activeForm] : undefined
       if (!activeForm || !t || t.redo.length === 0) return
+      const entry = t.redo[t.redo.length - 1]
       const next = redoHistory(t)
-      set({ tracked: { ...tracked, [activeForm]: next }, selection: pruneSelection(next.doc, selection), dirty: true })
+      const ids = pruneSelection(next.doc, followRenames(selection, entry.renames, 'redo'))
+      set({ tracked: { ...tracked, [activeForm]: next }, selection: ids, dirty: true })
     },
 
-    addComponent(type, parentId, x, y) {
+    addComponent(type, parentId, x, y, index) {
       const doc = get().currentDoc()
       if (!doc) return
       const node = createNode(doc, type, x, y)
       if (!node) return
-      get().edit((d) => addNode(d, parentId, node))
+      get().edit((d) => addNode(d, parentId, node, index))
       set({ selection: [node.id] })
+    },
+
+    renameComponent(id, newId) {
+      const doc = get().currentDoc()
+      if (!doc || id === newId) return null
+      const problem = idProblem(newId)
+      if (problem) return problem
+      if (allIds(doc).has(newId)) return `Já existe um componente com o ID "${newId}".`
+      get().edit((d) => renameNode(d, id, newId), undefined, [[id, newId]])
+      set((s) => ({ selection: s.selection.map((s2) => (s2 === id ? newId : s2)) }))
+      return null
+    },
+
+    setProp(id, key, value, txn) {
+      get().edit((d) => setProp(d, id, key, value), txn)
+    },
+
+    setFormProps(props) {
+      get().edit((d) => setFormProps(d, props))
     },
 
     deleteSelection() {
@@ -191,11 +238,23 @@ export const useIde = create<IdeState>((set, get) => {
       const ids = selectionRoots()
       if (!doc || ids.length === 0) return
       const rects: Record<string, { x: number; y: number }> = {}
+      const reorders: [id: string, parentId: string, index: number][] = []
       for (const id of ids) {
-        const node = locate(doc, id)?.node
-        if (node) rects[id] = { x: Math.max(0, node.x + dx), y: Math.max(0, node.y + dy) }
+        const loc = locate(doc, id)
+        if (!loc) continue
+        const layout = loc.parent ? layoutOf(loc.parent) : null
+        if (loc.parent && layout && layout.mode !== 'absolute') {
+          // Em auto-layout a seta troca o item de lugar na ordem, em vez de mover pixels.
+          const dir = Math.sign(layout.mode === 'vertical' ? dy : dx)
+          if (dir !== 0) reorders.push([id, loc.parent.id, loc.index + dir])
+        } else {
+          rects[id] = { x: Math.max(0, loc.node.x + dx), y: Math.max(0, loc.node.y + dy) }
+        }
       }
-      get().edit((d) => setRects(d, rects))
+      get().edit((d) => {
+        setRects(d, rects)
+        for (const [id, parentId, index] of reorders) moveToIndex(d, id, parentId, index)
+      })
     }
   }
 })

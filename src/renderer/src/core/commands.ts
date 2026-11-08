@@ -1,9 +1,10 @@
 // Comandos de edição: funções que alteram um rascunho (draft) do formulário.
 // Toda mutação passa por aqui; o histórico (history.ts) transforma cada uma em desfazer/refazer.
 import type { FormDocument, FormNode } from '@shared/project'
-import { CATALOG_BY_TYPE } from '../components/catalog'
-import { uniqueId } from './ids'
-import { absPos, allIds, isInside, locate, topmost } from './tree'
+import { CATALOG_BY_TYPE, COMMON_PROPS, defaultProps, propDef } from '../components/catalog'
+import { idProblem, uniqueId } from './ids'
+import { activeTab } from './props'
+import { absPos, allIds, insetTop, isInside, locate, topmost } from './tree'
 
 export interface Rect {
   x: number
@@ -30,7 +31,7 @@ export function createNode(doc: FormDocument, type: string, x: number, y: number
     y: Math.max(0, Math.round(y)),
     width: def.width,
     height: def.height,
-    props: clone(def.props)
+    props: defaultProps(type)
   }
   if (def.container) node.children = []
   return node
@@ -40,14 +41,30 @@ function isContainer(node: FormNode): boolean {
   return CATALOG_BY_TYPE[node.type]?.container === true
 }
 
-/** Adiciona o nó no container indicado; se ele não existir ou não for container, vai para o formulário. */
-export function addNode(doc: FormDocument, parentId: string | null, node: FormNode): void {
+/** Um filho de Tabs pertence a uma aba; em qualquer outro pai, não. */
+function assignTab(parent: FormNode | null, node: FormNode): void {
+  if (parent?.type === 'Tabs') node.tab = activeTab(parent)
+  else delete node.tab
+}
+
+function insertAt(list: FormNode[], node: FormNode, index?: number): void {
+  if (index === undefined) list.push(node)
+  else list.splice(Math.max(0, Math.min(index, list.length)), 0, node)
+}
+
+/**
+ * Adiciona o nó no container indicado (na posição `index`, se dada);
+ * se o pai não existir ou não for container, vai para o formulário.
+ */
+export function addNode(doc: FormDocument, parentId: string | null, node: FormNode, index?: number): void {
   const parent = parentId ? locate(doc, parentId)?.node : undefined
   if (parent && isContainer(parent)) {
     parent.children ??= []
-    parent.children.push(node)
+    assignTab(parent, node)
+    insertAt(parent.children, node, index)
   } else {
-    doc.children.push(node)
+    delete node.tab
+    insertAt(doc.children, node, index)
   }
 }
 
@@ -62,9 +79,25 @@ export function setRects(doc: FormDocument, rects: Record<string, Partial<Rect>>
   }
 }
 
+/** Altera uma propriedade. As comuns que voltam ao padrão são removidas do arquivo. */
 export function setProp(doc: FormDocument, id: string, key: string, value: unknown): void {
   const node = locate(doc, id)?.node
-  if (node) node.props[key] = value
+  if (!node) return
+  if (key in COMMON_PROPS && value === propDef(node.type, key)?.default) delete node.props[key]
+  else node.props[key] = value
+}
+
+/** Troca o ID de um componente. Ignora IDs inválidos ou já em uso (a validação amigável fica na store). */
+export function renameNode(doc: FormDocument, id: string, newId: string): void {
+  if (id === newId || idProblem(newId) !== null || allIds(doc).has(newId)) return
+  const node = locate(doc, id)?.node
+  if (node) node.id = newId
+}
+
+export function setFormProps(doc: FormDocument, props: Partial<Pick<FormDocument, 'title' | 'width' | 'height'>>): void {
+  if (props.title !== undefined) doc.title = props.title
+  if (props.width !== undefined) doc.width = Math.max(100, Math.round(props.width))
+  if (props.height !== undefined) doc.height = Math.max(100, Math.round(props.height))
 }
 
 export function deleteNodes(doc: FormDocument, ids: readonly string[]): void {
@@ -98,15 +131,47 @@ export function duplicateNodes(doc: FormDocument, ids: readonly string[]): strin
 }
 
 /**
- * Move os nós para outro container (ou para o formulário, com `newParentId` nulo),
- * mantendo a posição visual e limitando ao interior do novo pai.
+ * Move um nó para a posição `index` da lista de filhos de `parentId` (ou do formulário, se nulo).
+ * Serve para reordenar dentro de um container com auto-layout e para soltar dentro dele.
  */
-export function reparentNodes(doc: FormDocument, ids: readonly string[], newParentId: string | null): void {
+export function moveToIndex(doc: FormDocument, id: string, parentId: string | null, index: number): void {
+  const loc = locate(doc, id)
+  if (!loc) return
+  const target = parentId ? (locate(doc, parentId)?.node ?? null) : null
+  if (parentId && (!target || !isContainer(target) || id === parentId || isInside(doc, id, parentId))) return
+  const list = target ? (target.children ??= []) : doc.children
+
+  if (list === loc.list) {
+    const clamped = Math.max(0, Math.min(index, list.length - 1))
+    if (clamped === loc.index) return // já está lá: não gera patches à toa
+    list.splice(loc.index, 1)
+    list.splice(clamped, 0, loc.node)
+    return
+  }
+  loc.list.splice(loc.index, 1)
+  insertAt(list, loc.node, index)
+  assignTab(target, loc.node)
+}
+
+/**
+ * Move os nós para outro container (ou para o formulário, com `newParentId` nulo), limitando ao
+ * interior do novo pai. Por padrão mantém a posição visual; `positions` (relativas ao novo pai)
+ * substitui isso para quem vem de um container com auto-layout, onde x/y do modelo não valem.
+ */
+export function reparentNodes(
+  doc: FormDocument,
+  ids: readonly string[],
+  newParentId: string | null,
+  positions?: Record<string, { x: number; y: number }>
+): void {
   const newParent = newParentId ? (locate(doc, newParentId)?.node ?? null) : null
   if (newParentId && (!newParent || !isContainer(newParent))) return
   const parentAbs = newParentId ? absPos(doc, newParentId) : { x: 0, y: 0 }
   if (!parentAbs) return
-  const bounds = newParent ?? doc
+  const originX = parentAbs.x
+  const originY = parentAbs.y + (newParent ? insetTop(newParent) : 0)
+  const boundsW = newParent?.width ?? doc.width
+  const boundsH = (newParent?.height ?? doc.height) - (newParent ? insetTop(newParent) : 0)
 
   for (const id of topmost(doc, ids)) {
     const loc = locate(doc, id)
@@ -117,9 +182,12 @@ export function reparentNodes(doc: FormDocument, ids: readonly string[], newPare
     const abs = absPos(doc, id)
     if (!abs) continue
     const node = loc.node
-    node.x = Math.min(Math.max(0, abs.x - parentAbs.x), Math.max(0, bounds.width - node.width))
-    node.y = Math.min(Math.max(0, abs.y - parentAbs.y), Math.max(0, bounds.height - node.height))
+    const x = positions?.[id]?.x ?? abs.x - originX
+    const y = positions?.[id]?.y ?? abs.y - originY
+    node.x = Math.min(Math.max(0, x), Math.max(0, boundsW - node.width))
+    node.y = Math.min(Math.max(0, y), Math.max(0, boundsH - node.height))
     loc.list.splice(loc.index, 1)
+    assignTab(newParent, node)
     if (newParent) (newParent.children ??= []).push(node)
     else doc.children.push(node)
   }

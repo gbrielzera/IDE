@@ -29,6 +29,8 @@ export interface FormNode {
   height: number
   props: Record<string, unknown>
   children?: FormNode[]
+  /** Só em filhos de um Tabs: índice da aba em que o componente aparece. */
+  tab?: number
 }
 
 /** Documento de um formulário. */

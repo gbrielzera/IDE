@@ -1,11 +1,11 @@
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-
-const MAIN = resolve(__dirname, '../../out/main/index.js')
+import { join } from 'node:path'
+import { launchApp } from './helpers'
 
 let app: ElectronApplication
+let cleanupApp: () => Promise<void>
 let page: Page
 let dir: string
 
@@ -18,13 +18,13 @@ async function stubFolderDialog(folder: string): Promise<void> {
 
 test.beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'vform-e2e-'))
-  app = await electron.launch({ args: [MAIN] })
+  ;({ app, cleanup: cleanupApp } = await launchApp())
   page = await app.firstWindow()
   await page.waitForSelector('.welcome')
 })
 
 test.afterEach(async () => {
-  await app.close()
+  await cleanupApp()
   await rm(dir, { recursive: true, force: true })
 })
 

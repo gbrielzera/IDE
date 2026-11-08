@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import type { FormDocument, FormNode } from '@shared/project'
 import { CATALOG_BY_TYPE } from '../components/catalog'
-import { renderContent } from '../components/render'
-import { MIN_SIZE, reparentNodes, setRects } from '../core/commands'
-import { locate, topmost } from '../core/tree'
+import { appearanceStyle, renderContent } from '../components/render'
+import { MIN_SIZE, moveToIndex, reparentNodes, setRects } from '../core/commands'
+import { activeTab, getProp, layoutOf, type LayoutMode } from '../core/props'
+import { insetTop, locate, topmost } from '../core/tree'
 import { useIde } from '../store'
 
 export const DRAG_MIME = 'application/x-vform-type'
@@ -13,11 +14,23 @@ const DRAG_THRESHOLD = 4
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
+const ALIGN: Record<string, CSSProperties['alignItems']> = {
+  start: 'flex-start',
+  center: 'center',
+  end: 'flex-end',
+  stretch: 'stretch'
+}
+
 interface Box {
   x: number
   y: number
   w: number
   h: number
+}
+
+interface Point {
+  x: number
+  y: number
 }
 
 let txnCounter = 0
@@ -32,7 +45,25 @@ function isAdditive(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }
   return e.shiftKey || e.ctrlKey || e.metaKey
 }
 
-/** Container (Panel) sob o ponteiro, ignorando os nós arrastados e o que está dentro deles. */
+// ---------- Consultas ao DOM (posições reais na tela) ----------
+
+function nodeEl(surface: HTMLElement, id: string): HTMLElement | null {
+  return surface.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(id)}"]`)
+}
+
+/** Elemento onde os filhos do container são posicionados (o próprio formulário, se `id` for nulo). */
+function layerOf(surface: HTMLElement, id: string | null): HTMLElement {
+  if (!id) return surface
+  return surface.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(id)}"] > .children-layer`) ?? surface
+}
+
+/** Canto superior esquerdo da área interna (sem a borda) em coordenadas de tela. */
+function originOf(el: HTMLElement): Point {
+  const r = el.getBoundingClientRect()
+  return { x: r.left + el.clientLeft, y: r.top + el.clientTop }
+}
+
+/** Container (Panel/Tabs) sob o ponteiro, ignorando os nós arrastados e o que está dentro deles. */
 function containerAt(clientX: number, clientY: number, exclude: ReadonlySet<string>): string | null {
   for (const el of document.elementsFromPoint(clientX, clientY)) {
     if (!(el instanceof HTMLElement) || el.dataset.container !== 'true' || !el.dataset.nodeId) continue
@@ -45,6 +76,18 @@ function containerAt(clientX: number, clientY: number, exclude: ReadonlySet<stri
   return null
 }
 
+/** Posição (na lista de filhos) em que o ponteiro inseriria um item num container com auto-layout. */
+function insertionIndex(layer: HTMLElement, mode: LayoutMode, pointer: Point, exclude: ReadonlySet<string>): number {
+  let index = 0
+  for (const el of layer.querySelectorAll<HTMLElement>(':scope > .node')) {
+    if (el.dataset.nodeId && exclude.has(el.dataset.nodeId)) continue
+    const r = el.getBoundingClientRect()
+    const mid = mode === 'vertical' ? r.top + r.height / 2 : r.left + r.width / 2
+    if ((mode === 'vertical' ? pointer.y : pointer.x) > mid) index++
+  }
+  return index
+}
+
 function onPaletteDragOver(e: React.DragEvent): void {
   if (e.dataTransfer.types.includes(DRAG_MIME)) {
     e.preventDefault()
@@ -52,36 +95,83 @@ function onPaletteDragOver(e: React.DragEvent): void {
   }
 }
 
+/** Filhos visíveis: num Tabs, só os da aba selecionada. */
+function visibleChildren(node: FormNode): FormNode[] {
+  const all = node.children ?? []
+  return node.type === 'Tabs' ? all.filter((c) => (c.tab ?? 0) === activeTab(node)) : all
+}
+
 interface NodeViewProps {
   node: FormNode
+  parent: FormNode | null
   selected: ReadonlySet<string>
   showHandles: boolean
   onNodeDown(e: React.PointerEvent, node: FormNode): void
   onHandleDown(e: React.PointerEvent, node: FormNode, handle: Handle): void
 }
 
-function NodeView({ node, selected, showHandles, onNodeDown, onHandleDown }: NodeViewProps): React.JSX.Element {
+function NodeView({ node, parent, selected, showHandles, onNodeDown, onHandleDown }: NodeViewProps): React.JSX.Element {
   const isSelected = selected.has(node.id)
   const container = CATALOG_BY_TYPE[node.type]?.container === true
+  const parentLayout = parent ? layoutOf(parent) : null
+  const auto = parentLayout && parentLayout.mode !== 'absolute' ? parentLayout : null
+
+  // Em auto-layout o pai posiciona o filho (x/y não valem); no resto, posição absoluta.
+  let style: CSSProperties
+  if (auto) {
+    style = {
+      position: 'relative',
+      flex: 'none',
+      width: auto.align === 'stretch' && auto.mode === 'vertical' ? undefined : node.width,
+      height: auto.align === 'stretch' && auto.mode === 'horizontal' ? undefined : node.height
+    }
+  } else {
+    style = { left: node.x, top: node.y, width: node.width, height: node.height }
+  }
+
+  const own = layoutOf(node)
+  const layerStyle: CSSProperties = { top: insetTop(node) }
+  if (own.mode !== 'absolute') {
+    Object.assign(layerStyle, {
+      display: 'flex',
+      flexDirection: own.mode === 'vertical' ? 'column' : 'row',
+      gap: own.gap,
+      padding: own.padding,
+      alignItems: ALIGN[own.align]
+    })
+  }
+
+  const classes = ['node']
+  if (isSelected) classes.push('selected')
+  if (getProp(node, 'visible') === false) classes.push('is-hidden')
+  if (getProp(node, 'enabled') === false) classes.push('is-disabled')
+
   return (
     <div
-      className={`node${isSelected ? ' selected' : ''}`}
+      className={classes.join(' ')}
       data-node-id={node.id}
       data-container={container ? 'true' : undefined}
-      style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
+      style={style}
       onPointerDown={(e) => onNodeDown(e, node)}
     >
-      <div className="node-content">{renderContent(node)}</div>
-      {node.children?.map((child) => (
-        <NodeView
-          key={child.id}
-          node={child}
-          selected={selected}
-          showHandles={showHandles}
-          onNodeDown={onNodeDown}
-          onHandleDown={onHandleDown}
-        />
-      ))}
+      <div className="node-content" style={appearanceStyle(node)}>
+        {renderContent(node)}
+      </div>
+      {node.children && (
+        <div className={`children-layer${own.mode !== 'absolute' ? ' auto' : ''}`} style={layerStyle}>
+          {visibleChildren(node).map((child) => (
+            <NodeView
+              key={child.id}
+              node={child}
+              parent={node}
+              selected={selected}
+              showHandles={showHandles}
+              onNodeDown={onNodeDown}
+              onHandleDown={onHandleDown}
+            />
+          ))}
+        </div>
+      )}
       {isSelected && <span className="node-tag">{node.id}</span>}
       {isSelected &&
         showHandles &&
@@ -126,11 +216,55 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     window.addEventListener('pointercancel', up)
   }
 
+  /** Conclui um arraste: reordena num auto-layout ou muda os nós de container. */
+  function finishDrop(
+    ids: string[],
+    target: string | null,
+    ev: PointerEvent,
+    txn: string,
+    leaving: { primary: string; grab: Point } | null
+  ): void {
+    const surface = surfaceRef.current
+    const ide = useIde.getState()
+    const current = ide.currentDoc()
+    if (!surface || !current) return
+    const targetNode = target ? (locate(current, target)?.node ?? null) : null
+    const targetLayout = targetNode ? layoutOf(targetNode) : null
+    const pointer = { x: ev.clientX, y: ev.clientY }
+
+    if (target && targetLayout && targetLayout.mode !== 'absolute') {
+      const index = insertionIndex(layerOf(surface, target), targetLayout.mode, pointer, new Set(ids))
+      ide.edit((d) => ids.forEach((id, i) => moveToIndex(d, id, target, index + i)), txn)
+      return
+    }
+    let positions: Record<string, Point> | undefined
+    if (leaving) {
+      // Quem sai de um auto-layout não tem posição própria: usa onde o ponteiro soltou.
+      const o = originOf(layerOf(surface, target))
+      const grid = !ev.altKey
+      positions = {
+        [leaving.primary]: {
+          x: snap(ev.clientX - leaving.grab.x - o.x, grid),
+          y: snap(ev.clientY - leaving.grab.y - o.y, grid)
+        }
+      }
+    }
+    ide.edit((d) => reparentNodes(d, ids, target, positions), txn)
+  }
+
   function onNodeDown(e: React.PointerEvent, node: FormNode): void {
     if (e.button !== 0) return
     e.stopPropagation()
     e.preventDefault() // impede seleção de texto/arraste nativo iniciados por este clique
     const ide = useIde.getState()
+
+    // Clique no cabeçalho de uma aba: só troca de aba.
+    const tabEl = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-index]')
+    if (node.type === 'Tabs' && tabEl) {
+      ide.select([node.id])
+      ide.setProp(node.id, 'selectedIndex', Number(tabEl.dataset.tabIndex))
+      return
+    }
 
     let sel = ide.selection
     if (isAdditive(e)) {
@@ -143,17 +277,25 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     }
 
     const current = ide.currentDoc()
-    if (!current) return
-    const ids = topmost(current, sel)
-    const origins: Record<string, { x: number; y: number }> = {}
+    const surface = surfaceRef.current
+    if (!current || !surface) return
+    let ids = topmost(current, sel)
+    const primary = ids.includes(node.id) ? node.id : ids[0]
+    if (!primary) return
+    const parent = locate(current, primary)?.parent ?? null
+    const parentLayout = parent ? layoutOf(parent) : null
+    const auto = parent && parentLayout && parentLayout.mode !== 'absolute' ? { parent, layout: parentLayout } : null
+    if (auto) ids = [primary] // em auto-layout arrasta-se um item por vez (reordenar)
+
+    const grabRect = nodeEl(surface, primary)?.getBoundingClientRect()
+    const grab = grabRect ? { x: e.clientX - grabRect.left, y: e.clientY - grabRect.top } : { x: 0, y: 0 }
+    const origins: Record<string, Point> = {}
     for (const id of ids) {
       const n = locate(current, id)?.node
       if (n) origins[id] = { x: n.x, y: n.y }
     }
-    const primary = origins[node.id] ? node.id : ids[0]
-    if (!primary) return
-    const minX = Math.min(...ids.map((id) => origins[id].x))
-    const minY = Math.min(...ids.map((id) => origins[id].y))
+    const minX = Math.min(...ids.map((id) => origins[id]?.x ?? 0))
+    const minY = Math.min(...ids.map((id) => origins[id]?.y ?? 0))
     const startX = e.clientX
     const startY = e.clientY
     const txn = newTxn('move')
@@ -166,17 +308,29 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         const dy = ev.clientY - startY
         if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
         moved = true
+
+        if (auto) {
+          // Reordena ao vivo enquanto o ponteiro estiver dentro do container.
+          const layer = layerOf(surface, auto.parent.id)
+          const r = layer.getBoundingClientRect()
+          if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) return
+          const index = insertionIndex(layer, auto.layout.mode, { x: ev.clientX, y: ev.clientY }, new Set([primary]))
+          useIde.getState().edit((d) => moveToIndex(d, primary, auto.parent.id, index), txn)
+          return
+        }
+
         const grid = !ev.altKey
         const ddx = Math.max(snap(origins[primary].x + dx, grid) - origins[primary].x, -minX)
         const ddy = Math.max(snap(origins[primary].y + dy, grid) - origins[primary].y, -minY)
-        const rects: Record<string, { x: number; y: number }> = {}
+        const rects: Record<string, Point> = {}
         for (const id of ids) rects[id] = { x: origins[id].x + ddx, y: origins[id].y + ddy }
         useIde.getState().edit((d) => setRects(d, rects), txn)
       },
       (ev) => {
         if (!moved) return
         const target = containerAt(ev.clientX, ev.clientY, new Set(ids))
-        useIde.getState().edit((d) => reparentNodes(d, ids, target), txn)
+        if (auto && target === auto.parent.id) return // só reordenou dentro do mesmo container
+        finishDrop(ids, target, ev, txn, auto ? { primary, grab } : null)
       }
     )
   }
@@ -249,15 +403,23 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
 
   function onDrop(e: React.DragEvent): void {
     const type = e.dataTransfer.getData(DRAG_MIME)
-    if (!type) return
+    const surface = surfaceRef.current
+    if (!type || !surface) return
     e.preventDefault()
     const hostEl = (e.target as HTMLElement).closest<HTMLElement>('[data-container="true"]')
     const parentId = hostEl?.dataset.nodeId ?? null
-    const rect = (hostEl ?? surfaceRef.current)?.getBoundingClientRect()
-    if (!rect) return
-    const x = snap(e.clientX - rect.left, true)
-    const y = snap(e.clientY - rect.top, true)
-    useIde.getState().addComponent(type, parentId, x, y)
+    const host = parentId ? locate(doc, parentId)?.node : null
+    const layout = host ? layoutOf(host) : null
+    const layer = layerOf(surface, parentId)
+
+    if (parentId && layout && layout.mode !== 'absolute') {
+      // Em auto-layout o item entra na ordem, na posição do ponteiro.
+      const index = insertionIndex(layer, layout.mode, { x: e.clientX, y: e.clientY }, new Set())
+      useIde.getState().addComponent(type, parentId, 0, 0, index)
+      return
+    }
+    const o = originOf(layer)
+    useIde.getState().addComponent(type, parentId, snap(e.clientX - o.x, true), snap(e.clientY - o.y, true))
   }
 
   return (
@@ -285,6 +447,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
           <NodeView
             key={node.id}
             node={node}
+            parent={null}
             selected={selected}
             showHandles={selection.length === 1}
             onNodeDown={onNodeDown}

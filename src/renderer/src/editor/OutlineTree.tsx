@@ -20,6 +20,7 @@ function Row({ node, depth }: { node: FormNode; depth: number }): React.JSX.Elem
         onClick={onClick}
       >
         {node.id} <span className="muted">{node.type}</span>
+        {node.tab !== undefined && <span className="muted"> · aba {node.tab + 1}</span>}
       </button>
       {node.children && node.children.length > 0 && (
         <ul className="tree">

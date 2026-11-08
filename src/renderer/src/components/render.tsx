@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { FormNode } from '@shared/project'
+import { activeTab } from '../core/props'
 
 function strings(v: unknown): string[] {
   return Array.isArray(v) ? v.map(String) : []
@@ -9,12 +10,30 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
 
+/** Fonte e cores do componente, repassadas ao CSS por variáveis (só as que foram alteradas). */
+export function appearanceStyle(node: FormNode): CSSProperties {
+  const p = node.props
+  const vars: Record<string, string> = {}
+  if (typeof p.fontSize === 'number') vars['--c-size'] = `${p.fontSize}px`
+  if (p.bold === true) vars['--c-weight'] = '700'
+  if (p.italic === true) vars['--c-style'] = 'italic'
+  if (typeof p.color === 'string' && p.color) vars['--c-color'] = p.color
+  if (typeof p.background === 'string' && p.background) vars['--c-bg'] = p.background
+  return vars as CSSProperties
+}
+
+const JUSTIFY: Record<string, string> = { left: 'flex-start', center: 'center', right: 'flex-end' }
+
 /** Aparência estática do componente no canvas (a interação real vem do runtime, no M3). */
 export function renderContent(node: FormNode): ReactNode {
   const p = node.props
   switch (node.type) {
     case 'Label':
-      return <div className="cmp cmp-label">{str(p.text)}</div>
+      return (
+        <div className="cmp cmp-label" style={{ justifyContent: JUSTIFY[str(p.align)] ?? 'flex-start' }}>
+          {str(p.text)}
+        </div>
+      )
     case 'TextField':
       return (
         <div className="cmp cmp-input">
@@ -66,12 +85,13 @@ export function renderContent(node: FormNode): ReactNode {
       return <div className="cmp cmp-image">{str(p.source) || 'Imagem'}</div>
     case 'Panel':
       return <div className="cmp cmp-panel" />
-    case 'Tabs':
+    case 'Tabs': {
+      const selected = activeTab(node)
       return (
         <div className="cmp cmp-tabs">
           <div className="cmp-tabbar">
             {strings(p.tabs).map((tab, i) => (
-              <span key={i} className={`cmp-tab${p.selectedIndex === i ? ' on' : ''}`}>
+              <span key={i} className={`cmp-tab${selected === i ? ' on' : ''}`} data-tab-index={i}>
                 {tab}
               </span>
             ))}
@@ -79,6 +99,7 @@ export function renderContent(node: FormNode): ReactNode {
           <div className="cmp-tabbody" />
         </div>
       )
+    }
     case 'Table':
       return (
         <div className="cmp cmp-table">

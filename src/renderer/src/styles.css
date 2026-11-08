@@ -471,6 +471,28 @@ button.link {
   inset: 0;
   pointer-events: none;
 }
+/* Camada dos filhos: começa abaixo do cabeçalho do componente (abas) e só repassa cliques aos filhos. */
+.children-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.children-layer > .node {
+  pointer-events: auto;
+}
+.node.is-hidden:not(.selected) {
+  opacity: 0.4;
+  outline: 1px dashed var(--shadow);
+}
+.node.is-hidden.selected > .node-content {
+  opacity: 0.4;
+}
+.node.is-disabled > .node-content {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
 .node-tag {
   position: absolute;
   left: -1px;
@@ -503,19 +525,31 @@ button.link {
 .cmp {
   width: 100%;
   height: 100%;
-  font-size: 12px;
-  color: var(--f-text);
+  font-size: var(--c-size, 12px);
+  font-weight: var(--c-weight, 400);
+  font-style: var(--c-style, normal);
+  color: var(--c-color, var(--f-text));
   overflow: hidden;
 }
 .cmp-label {
   display: flex;
   align-items: center;
+  background: var(--c-bg, transparent);
+}
+.cmp-radios {
+  background: var(--c-bg, transparent);
+}
+.cmp.cmp-check {
+  background: var(--c-bg, transparent);
+}
+.cmp-input,
+.cmp-table {
+  background: var(--c-bg, #fff);
 }
 .cmp-input,
 .cmp-image,
 .cmp-table,
 .cmp-tabbody {
-  background: #fff;
   border: 1px solid;
   border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
   box-shadow: inset 1px 1px 0 var(--f-dk);
@@ -536,7 +570,7 @@ button.link {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--f-face);
+  background: var(--c-bg, var(--f-face));
   border: 1px solid;
   border-color: var(--f-hl) var(--f-dk) var(--f-dk) var(--f-hl);
   box-shadow: inset -1px -1px 0 var(--f-sh);
@@ -601,12 +635,12 @@ button.link {
   align-items: center;
   justify-content: center;
   color: #8a897f;
-  background: repeating-linear-gradient(45deg, #f4f3ee, #f4f3ee 8px, #e9e8e1 8px, #e9e8e1 16px);
+  background: var(--c-bg, repeating-linear-gradient(45deg, #f4f3ee, #f4f3ee 8px, #e9e8e1 8px, #e9e8e1 16px));
 }
 .cmp-panel {
   border: 1px solid;
   border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
-  background: rgba(150, 148, 138, 0.1);
+  background: var(--c-bg, rgba(150, 148, 138, 0.1));
 }
 .cmp-tabs {
   display: flex;
@@ -614,10 +648,13 @@ button.link {
 }
 .cmp-tabbar {
   display: flex;
+  align-items: flex-end;
   gap: 0;
+  height: 24px; /* = TABS_HEADER_HEIGHT: os filhos do Tabs começam logo abaixo */
   padding-left: 2px;
 }
 .cmp-tab {
+  pointer-events: auto; /* único trecho do componente que recebe clique: troca de aba */
   padding: 2px 10px;
   margin-top: 2px;
   background: var(--f-face);
@@ -633,7 +670,7 @@ button.link {
 }
 .cmp-tabbody {
   flex: 1;
-  background: var(--f-face);
+  background: var(--c-bg, var(--f-face));
   border-color: var(--f-hl) var(--f-dk) var(--f-dk) var(--f-hl);
   box-shadow: inset -1px -1px 0 var(--f-sh);
 }
@@ -662,24 +699,83 @@ button.link {
   margin: 0 0 10px;
   border: 1px solid var(--shadow);
 }
+.props-section {
+  padding: 2px 6px;
+  font-weight: 700;
+  background: var(--face);
+  border-bottom: 1px solid var(--shadow);
+  border-top: 1px solid var(--shadow);
+}
+.props-section:first-child {
+  border-top: none;
+}
 .props-row {
   display: grid;
-  grid-template-columns: 82px 1fr;
+  grid-template-columns: 96px minmax(0, 1fr);
   border-bottom: 1px solid var(--face-2);
 }
-.props-row:last-child {
-  border-bottom: none;
-}
 .props dt {
-  padding: 2px 6px;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
   background: var(--face);
   border-right: 1px solid var(--shadow);
 }
 .props dd {
   margin: 0;
-  padding: 2px 6px;
-  word-break: break-all;
+  padding: 2px 4px;
+  min-width: 0;
+  word-break: break-word;
+}
+.props input[type='text'],
+.props input[type='number'],
+.props select,
+.props textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--paper);
+  border: 1px solid;
+  border-color: var(--shadow) var(--hl) var(--hl) var(--shadow);
+  box-shadow: inset 1px 1px 0 var(--dkshadow);
+  border-radius: 0;
+  padding: 1px 4px;
+}
+.props textarea {
+  resize: vertical;
+}
+.props input:focus,
+.props select:focus,
+.props textarea:focus {
+  outline: 1px dotted var(--text);
+  outline-offset: 1px;
+}
+.props [aria-invalid='true'] {
+  border-color: var(--error);
+}
+.prop-error {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--error);
+}
+.color-editor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.color-editor input[type='color'] {
+  flex: none;
+  width: 28px;
+  height: 21px;
+  padding: 0;
+  border: 1px solid var(--shadow);
+  background: none;
+}
+.color-editor input[type='text'] {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ---------- Console ---------- */

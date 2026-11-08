@@ -1,4 +1,5 @@
 import type { FormNode } from '@shared/project'
+import { CATALOG_BY_TYPE } from '../components/catalog'
 
 export interface HasChildren {
   children: FormNode[]
@@ -42,13 +43,18 @@ export function allIds(root: HasChildren): Set<string> {
   return ids
 }
 
-/** Posição do nó em relação ao formulário (soma as posições dos ancestrais). */
+/** Espaço no topo de um container ocupado por ele mesmo (as abas do Tabs). */
+export function insetTop(node: FormNode): number {
+  return CATALOG_BY_TYPE[node.type]?.insetTop ?? 0
+}
+
+/** Posição do nó em relação ao formulário (soma as posições e os recuos dos ancestrais). */
 export function absPos(root: HasChildren, id: string): { x: number; y: number } | null {
   function search(list: FormNode[], ox: number, oy: number): { x: number; y: number } | null {
     for (const node of list) {
       if (node.id === id) return { x: ox + node.x, y: oy + node.y }
       if (node.children) {
-        const found = search(node.children, ox + node.x, oy + node.y)
+        const found = search(node.children, ox + node.x, oy + node.y + insetTop(node))
         if (found) return found
       }
     }
