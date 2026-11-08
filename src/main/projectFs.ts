@@ -1,0 +1,137 @@
+import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { promises as fs } from 'node:fs'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import {
+  PROJECT_FILE,
+  PROJECT_FORMAT,
+  SCHEMA_VERSION,
+  newFormDocument,
+  newFormScript,
+  type LoadedProject,
+  type ProjectManifest,
+  type ProjectResult,
+  type SaveResult
+} from '@shared/project'
+
+/** Pasta do projeto aberto em cada janela. O renderer nunca escolhe onde gravar. */
+const openDirs = new Map<number, string>()
+
+const SAVABLE_EXTENSIONS = new Set(['.json', '.py'])
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/** Resolve um caminho relativo garantindo que ele fique dentro da pasta do projeto. */
+function insideProject(dir: string, rel: string): string {
+  if (isAbsolute(rel)) throw new Error(`Caminho absoluto não permitido: ${rel}`)
+  const full = resolve(dir, rel)
+  const back = relative(dir, full)
+  if (back === '' || back.startsWith('..') || isAbsolute(back)) throw new Error(`Caminho fora do projeto: ${rel}`)
+  return full
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function readProject(dir: string): Promise<LoadedProject> {
+  const raw = await fs.readFile(join(dir, PROJECT_FILE), 'utf8')
+  const manifest = JSON.parse(raw) as ProjectManifest
+  if (manifest.format !== PROJECT_FORMAT) throw new Error(`${PROJECT_FILE} não é um projeto VForm.`)
+  if (manifest.version > SCHEMA_VERSION)
+    throw new Error(`Projeto na versão ${manifest.version}; esta IDE lê até a versão ${SCHEMA_VERSION}.`)
+  const files: Record<string, string> = { [PROJECT_FILE]: raw }
+  for (const form of manifest.forms) {
+    for (const rel of [form.layout, form.script]) {
+      files[rel] = await fs.readFile(insideProject(dir, rel), 'utf8')
+    }
+  }
+  return { dir, manifest, files }
+}
+
+async function pickFolder(win: BrowserWindow, title: string): Promise<string | null> {
+  const res = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] })
+  return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
+}
+
+async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (!win) return { ok: false, error: 'Janela não encontrada.' }
+  const dir = await pickFolder(win, 'Escolha uma pasta vazia para o novo projeto')
+  if (!dir) return { ok: false, canceled: true }
+  try {
+    if (await exists(join(dir, PROJECT_FILE)))
+      return { ok: false, error: 'Essa pasta já contém um projeto. Use "Abrir projeto".' }
+    const formName = 'Main'
+    const manifest: ProjectManifest = {
+      format: PROJECT_FORMAT,
+      version: SCHEMA_VERSION,
+      name: basename(dir),
+      forms: [{ name: formName, layout: `${formName}.form.json`, script: `${formName}.py` }]
+    }
+    await fs.writeFile(join(dir, PROJECT_FILE), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+    await fs.writeFile(join(dir, `${formName}.form.json`), JSON.stringify(newFormDocument(formName), null, 2) + '\n', 'utf8')
+    await fs.writeFile(join(dir, `${formName}.py`), newFormScript(formName), 'utf8')
+    const project = await readProject(dir)
+    openDirs.set(win.id, dir)
+    return { ok: true, project }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
+}
+
+async function openProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (!win) return { ok: false, error: 'Janela não encontrada.' }
+  const dir = await pickFolder(win, 'Abrir projeto (pasta com project.json)')
+  if (!dir) return { ok: false, canceled: true }
+  try {
+    if (!(await exists(join(dir, PROJECT_FILE)))) return { ok: false, error: `A pasta não tem ${PROJECT_FILE}.` }
+    const project = await readProject(dir)
+    openDirs.set(win.id, dir)
+    return { ok: true, project }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
+}
+
+async function saveProject(e: IpcMainInvokeEvent, files: unknown): Promise<SaveResult> {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  const dir = win ? openDirs.get(win.id) : undefined
+  if (!dir) return { ok: false, error: 'Nenhum projeto aberto.' }
+  if (typeof files !== 'object' || files === null) return { ok: false, error: 'Dados inválidos.' }
+  try {
+    // Valida tudo antes de gravar qualquer arquivo.
+    const writes: [string, string][] = []
+    for (const [rel, content] of Object.entries(files)) {
+      if (typeof content !== 'string') throw new Error(`Conteúdo inválido para ${rel}`)
+      if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
+      writes.push([insideProject(dir, rel), content])
+    }
+    for (const [full, content] of writes) {
+      // Grava num temporário e renomeia, para não corromper o arquivo se algo falhar no meio.
+      const tmp = `${full}.tmp`
+      await fs.writeFile(tmp, content, 'utf8')
+      await fs.rename(tmp, full)
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
+}
+
+export function registerProjectIpc(): void {
+  ipcMain.handle('project:new', newProject)
+  ipcMain.handle('project:open', openProject)
+  ipcMain.handle('project:save', saveProject)
+}
+
+export function forgetWindow(id: number): void {
+  openDirs.delete(id)
+}

@@ -1,0 +1,68 @@
+// Tipos do arquivo de projeto, compartilhados entre main, preload e renderer.
+
+export const PROJECT_FILE = 'project.json'
+export const PROJECT_FORMAT = 'vform-project'
+export const FORM_FORMAT = 'vform-form'
+export const SCHEMA_VERSION = 1
+
+export interface ProjectFormRef {
+  /** Nome do formulário; também é a base dos arquivos (Main → Main.form.json + Main.py). */
+  name: string
+  layout: string
+  script: string
+}
+
+export interface ProjectManifest {
+  format: typeof PROJECT_FORMAT
+  version: number
+  name: string
+  forms: ProjectFormRef[]
+}
+
+/** Documento de um formulário (o schema completo dos nós entra no M1). */
+export interface FormDocument {
+  format: typeof FORM_FORMAT
+  version: number
+  name: string
+  title: string
+  width: number
+  height: number
+  children: unknown[]
+}
+
+export interface LoadedProject {
+  dir: string
+  manifest: ProjectManifest
+  /** Conteúdo dos arquivos do projeto, por caminho relativo à pasta do projeto. */
+  files: Record<string, string>
+}
+
+export type ProjectResult =
+  | { ok: true; project: LoadedProject }
+  | { ok: false; canceled: true }
+  | { ok: false; canceled?: false; error: string }
+
+export type SaveResult = { ok: true } | { ok: false; error: string }
+
+/** API exposta pelo preload em `window.vform`. */
+export interface VformApi {
+  newProject(): Promise<ProjectResult>
+  openProject(): Promise<ProjectResult>
+  saveProject(files: Record<string, string>): Promise<SaveResult>
+}
+
+export function newFormDocument(name: string): FormDocument {
+  return { format: FORM_FORMAT, version: SCHEMA_VERSION, name, title: name, width: 640, height: 480, children: [] }
+}
+
+export function newFormScript(name: string): string {
+  return [
+    `# Lógica do formulário ${name}.`,
+    '# Acesse os componentes pelo ID, por exemplo: form.txtNome.value',
+    '',
+    '@form.on_load',
+    'def ao_carregar():',
+    '    pass',
+    ''
+  ].join('\n')
+}
