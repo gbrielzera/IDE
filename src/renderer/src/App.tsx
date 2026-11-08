@@ -10,21 +10,54 @@ import { ConsolePanel } from './editor/ConsolePanel'
 import { StatusBar } from './editor/StatusBar'
 import { Welcome } from './editor/Welcome'
 
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+}
+
 function useShortcuts(): void {
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
-      const k = e.key.toLowerCase()
+      if (e.altKey) return
       const ide = useIde.getState()
-      if (k === 's') {
+      const mod = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+
+      if (mod) {
+        const handlers: Record<string, () => void> = {
+          s: () => void ide.saveProject(),
+          o: () => void ide.openProject(),
+          n: () => void ide.newProject()
+        }
+        if (!isTyping(e.target)) {
+          handlers.z = e.shiftKey ? ide.redo : ide.undo
+          handlers.y = ide.redo
+          handlers.d = ide.duplicateSelection
+        }
+        const run = handlers[k]
+        if (run) {
+          e.preventDefault()
+          run()
+        }
+        return
+      }
+
+      // Edição direta no canvas: ignorada enquanto se digita em campos de texto.
+      if (isTyping(e.target) || !ide.currentDoc()) return
+      const step = e.shiftKey ? 10 : 1
+      const moves: Record<string, [number, number]> = {
+        arrowleft: [-step, 0],
+        arrowright: [step, 0],
+        arrowup: [0, -step],
+        arrowdown: [0, step]
+      }
+      if (k === 'delete' || k === 'backspace') {
         e.preventDefault()
-        void ide.saveProject()
-      } else if (k === 'o') {
+        ide.deleteSelection()
+      } else if (k === 'escape') {
+        ide.select([])
+      } else if (moves[k] && ide.selection.length > 0) {
         e.preventDefault()
-        void ide.openProject()
-      } else if (k === 'n') {
-        e.preventDefault()
-        void ide.newProject()
+        ide.nudgeSelection(...moves[k])
       }
     }
     window.addEventListener('keydown', onKey)

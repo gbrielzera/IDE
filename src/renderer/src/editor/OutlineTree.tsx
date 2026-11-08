@@ -1,30 +1,61 @@
-import { useIde } from '../store'
+import type { FormNode } from '@shared/project'
+import { useActiveFormDoc, useIde } from '../store'
+
+function Row({ node, depth }: { node: FormNode; depth: number }): React.JSX.Element {
+  const selected = useIde((s) => s.selection.includes(node.id))
+
+  function onClick(e: React.MouseEvent): void {
+    const { selection, select } = useIde.getState()
+    if (e.shiftKey || e.ctrlKey || e.metaKey)
+      select(selection.includes(node.id) ? selection.filter((id) => id !== node.id) : [...selection, node.id])
+    else select([node.id])
+  }
+
+  return (
+    <li>
+      <button
+        className={`tree-item${selected ? ' active' : ''}`}
+        style={{ paddingLeft: 4 + depth * 14 }}
+        data-testid={`tree-${node.id}`}
+        onClick={onClick}
+      >
+        {node.id} <span className="muted">{node.type}</span>
+      </button>
+      {node.children && node.children.length > 0 && (
+        <ul className="tree">
+          {node.children.map((c) => (
+            <Row key={c.id} node={c} depth={depth + 1} />
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
 
 export function OutlineTree(): React.JSX.Element {
-  const forms = useIde((s) => s.project?.manifest.forms)
-  const active = useIde((s) => s.activeForm)
-  const setActiveForm = useIde((s) => s.setActiveForm)
+  const doc = useActiveFormDoc()
 
   return (
     <section className="pane">
       <h2 className="pane-title">Estrutura</h2>
       <div className="pane-body">
-        {!forms ? (
-          <p className="muted">Nenhum projeto aberto.</p>
+        {!doc ? (
+          <p className="muted">Nenhum formulário aberto.</p>
         ) : (
-          <ul className="tree">
-            {forms.map((f) => (
-              <li key={f.name}>
-                <button
-                  className={`tree-item${f.name === active ? ' active' : ''}`}
-                  onClick={() => setActiveForm(f.name)}
-                >
-                  ▾ {f.name}
-                </button>
-                <p className="muted tree-empty">sem componentes</p>
-              </li>
-            ))}
-          </ul>
+          <>
+            <button className="tree-item" onClick={() => useIde.getState().select([])}>
+              ▾ {doc.name}
+            </button>
+            {doc.children.length === 0 ? (
+              <p className="muted tree-empty">sem componentes</p>
+            ) : (
+              <ul className="tree">
+                {doc.children.map((n) => (
+                  <Row key={n.id} node={n} depth={1} />
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
     </section>

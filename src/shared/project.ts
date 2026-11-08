@@ -19,7 +19,19 @@ export interface ProjectManifest {
   forms: ProjectFormRef[]
 }
 
-/** Documento de um formulário (o schema completo dos nós entra no M1). */
+/** Um componente no formulário. x/y são relativos ao pai (formulário ou container). */
+export interface FormNode {
+  id: string
+  type: string
+  x: number
+  y: number
+  width: number
+  height: number
+  props: Record<string, unknown>
+  children?: FormNode[]
+}
+
+/** Documento de um formulário. */
 export interface FormDocument {
   format: typeof FORM_FORMAT
   version: number
@@ -27,7 +39,7 @@ export interface FormDocument {
   title: string
   width: number
   height: number
-  children: unknown[]
+  children: FormNode[]
 }
 
 export interface LoadedProject {
