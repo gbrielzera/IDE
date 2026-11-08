@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { promises as fs } from 'node:fs'
-import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import {
   PROJECT_FILE,
   PROJECT_FORMAT,
@@ -17,6 +17,9 @@ import {
 const openDirs = new Map<number, string>()
 
 const SAVABLE_EXTENSIONS = new Set(['.json', '.py'])
+
+/** Última pasta de projeto usada: os seletores já abrem nela. */
+let lastDir: string | undefined
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -56,7 +59,11 @@ async function readProject(dir: string): Promise<LoadedProject> {
 }
 
 async function pickFolder(win: BrowserWindow, title: string): Promise<string | null> {
-  const res = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] })
+  const res = await dialog.showOpenDialog(win, {
+    title,
+    defaultPath: lastDir,
+    properties: ['openDirectory', 'createDirectory']
+  })
   return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
 }
 
@@ -65,6 +72,7 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   if (!win) return { ok: false, error: 'Janela não encontrada.' }
   const dir = await pickFolder(win, 'Escolha uma pasta vazia para o novo projeto')
   if (!dir) return { ok: false, canceled: true }
+  lastDir = dir
   try {
     if (await exists(join(dir, PROJECT_FILE)))
       return { ok: false, error: 'Essa pasta já contém um projeto. Use "Abrir projeto".' }
@@ -86,12 +94,39 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   }
 }
 
+/**
+ * Seletor de ARQUIVO: um seletor de pasta do Windows só lista subpastas e esconde os arquivos,
+ * o que dá a impressão de pasta vazia. Aqui o usuário enxerga e escolhe o project.json.
+ */
+async function pickProjectFile(win: BrowserWindow): Promise<string | null> {
+  const res = await dialog.showOpenDialog(win, {
+    title: `Abrir projeto — selecione o ${PROJECT_FILE}`,
+    defaultPath: lastDir,
+    properties: ['openFile'],
+    filters: [
+      { name: 'Projeto VForm', extensions: ['json'] },
+      { name: 'Todos os arquivos', extensions: ['*'] }
+    ]
+  })
+  return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
+}
+
+/** Aceita o project.json (o normal) ou a própria pasta do projeto. */
+async function projectDirFrom(picked: string): Promise<string> {
+  if ((await fs.stat(picked)).isDirectory()) return picked
+  if (basename(picked).toLowerCase() !== PROJECT_FILE)
+    throw new Error(`Selecione o arquivo ${PROJECT_FILE} da pasta do projeto.`)
+  return dirname(picked)
+}
+
 async function openProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   const win = BrowserWindow.fromWebContents(e.sender)
   if (!win) return { ok: false, error: 'Janela não encontrada.' }
-  const dir = await pickFolder(win, 'Abrir projeto (pasta com project.json)')
-  if (!dir) return { ok: false, canceled: true }
+  const picked = await pickProjectFile(win)
+  if (!picked) return { ok: false, canceled: true }
   try {
+    const dir = await projectDirFrom(picked)
+    lastDir = dir
     if (!(await exists(join(dir, PROJECT_FILE)))) return { ok: false, error: `A pasta não tem ${PROJECT_FILE}.` }
     const project = await readProject(dir)
     openDirs.set(win.id, dir)

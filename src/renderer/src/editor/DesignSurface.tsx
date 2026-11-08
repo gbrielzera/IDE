@@ -98,12 +98,27 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
   const [marquee, setMarquee] = useState<Box | null>(null)
   const selected = new Set(selection)
 
-  /** Segura os listeners na janela até soltar o botão, mesmo se o ponteiro sair do canvas. */
-  function track(onMove: (e: PointerEvent) => void, onUp: (e: PointerEvent) => void): void {
+  /**
+   * Acompanha o gesto até soltar o botão, mesmo se o ponteiro sair do canvas.
+   * O ponteiro fica "capturado" pelo canvas (que nunca é recriado durante o gesto): sem isso o
+   * navegador pode assumir o gesto (arraste nativo, toque) e cancelar o arraste após poucos pixels.
+   */
+  function track(pointerId: number, onMove: (e: PointerEvent) => void, onUp: (e: PointerEvent) => void): void {
+    const surface = surfaceRef.current
+    try {
+      surface?.setPointerCapture(pointerId)
+    } catch {
+      // Sem captura o arraste continua funcionando pelos listeners da janela.
+    }
     const up = (e: PointerEvent): void => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
+      try {
+        surface?.releasePointerCapture(pointerId)
+      } catch {
+        // Já liberado pelo navegador.
+      }
       onUp(e)
     }
     window.addEventListener('pointermove', onMove)
@@ -114,6 +129,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
   function onNodeDown(e: React.PointerEvent, node: FormNode): void {
     if (e.button !== 0) return
     e.stopPropagation()
+    e.preventDefault() // impede seleção de texto/arraste nativo iniciados por este clique
     const ide = useIde.getState()
 
     let sel = ide.selection
@@ -144,6 +160,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     let moved = false
 
     track(
+      e.pointerId,
       (ev) => {
         const dx = ev.clientX - startX
         const dy = ev.clientY - startY
@@ -174,6 +191,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     const txn = newTxn('resize')
 
     track(
+      e.pointerId,
       (ev) => {
         const grid = !ev.altKey
         const dx = ev.clientX - startX
@@ -199,6 +217,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     if (e.button !== 0 || e.target !== e.currentTarget) return
     const surface = surfaceRef.current
     if (!surface) return
+    e.preventDefault()
     const ide = useIde.getState()
     const additive = isAdditive(e)
     const base = additive ? ide.selection : []
@@ -209,6 +228,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     const startY = e.clientY
 
     track(
+      e.pointerId,
       (ev) => {
         const x1 = Math.min(startX, ev.clientX)
         const y1 = Math.min(startY, ev.clientY)
@@ -242,13 +262,21 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
 
   return (
     <div className="form-frame" style={{ width: doc.width }}>
-      <div className="form-titlebar">{doc.title}</div>
+      <div className="form-titlebar">
+        <span className="form-title-text">{doc.title}</span>
+        <span className="wincaps" aria-hidden="true">
+          <i>_</i>
+          <i>□</i>
+          <i>×</i>
+        </span>
+      </div>
       <div
         ref={surfaceRef}
         className="form-surface"
         data-testid="surface"
         style={{ height: doc.height }}
         onPointerDown={onSurfaceDown}
+        onDragStart={(e) => e.preventDefault()}
         onDragOver={onPaletteDragOver}
         onDrop={onDrop}
       >

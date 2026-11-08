@@ -33,7 +33,7 @@ test('novo projeto cria os arquivos e mostra o formulário Main', async ({}, inf
   await page.getByRole('button', { name: 'Novo projeto' }).click()
 
   await expect(page.locator('.tab.active')).toHaveText('Main.form.json')
-  await expect(page.locator('.form-titlebar')).toHaveText('Main')
+  await expect(page.locator('.form-title-text')).toHaveText('Main')
   await expect(page.locator('.console-line').last()).toContainText('criado')
   await expect(page).toHaveTitle(/ — VForm IDE$/)
 
@@ -69,11 +69,61 @@ test('abrir e salvar (Ctrl+S) um projeto existente', async () => {
   await writeFile(formPath, JSON.stringify(form), 'utf8')
 
   await page.getByRole('button', { name: 'Abrir', exact: true }).click()
-  await expect(page.locator('.form-titlebar')).toHaveText('Cadastro')
+  await expect(page.locator('.form-title-text')).toHaveText('Cadastro')
 
   await page.keyboard.press('Control+s')
   await expect(page.locator('.console-line').last()).toHaveText(/Projeto salvo\./)
   expect(await readFile(join(dir, 'Main.py'), 'utf8')).toBe(before)
+})
+
+test('Abrir usa um seletor de ARQUIVO que mostra o project.json', async () => {
+  await stubFolderDialog(dir)
+  await page.getByRole('button', { name: 'Novo projeto' }).click()
+  await expect(page.locator('.tab.active')).toBeVisible()
+
+  // Captura as opções que a IDE passa ao diálogo e responde como se o usuário escolhesse o arquivo.
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async (...args: unknown[]) => {
+      const opts = args[args.length - 1] as { properties?: string[]; filters?: { extensions: string[] }[] }
+      ;(globalThis as Record<string, unknown>).__openOpts = opts
+      return { canceled: false, filePaths: [file] }
+    }
+  }, join(dir, 'project.json'))
+
+  await page.getByRole('button', { name: 'Abrir', exact: true }).click()
+  await expect(page.locator('.console-line').last()).toContainText('aberto')
+
+  const opts = await app.evaluate(() => (globalThis as Record<string, unknown>).__openOpts as {
+    properties: string[]
+    filters: { extensions: string[] }[]
+  })
+  expect(opts.properties).toContain('openFile')
+  expect(opts.properties).not.toContain('openDirectory')
+  expect(opts.filters[0].extensions).toContain('json')
+})
+
+test('Abrir recusa um arquivo que não é o project.json', async () => {
+  await stubFolderDialog(dir)
+  await page.getByRole('button', { name: 'Novo projeto' }).click()
+  await expect(page.locator('.tab.active')).toBeVisible()
+
+  await stubFolderDialog(join(dir, 'Main.py'))
+  await page.getByRole('button', { name: 'Abrir', exact: true }).click()
+  await expect(page.locator('.console-line.error').last()).toContainText('project.json')
+})
+
+test('o menu Arquivo cria um projeto e fecha ao clicar fora', async () => {
+  await stubFolderDialog(dir)
+  await page.getByRole('button', { name: 'Arquivo' }).click()
+  await expect(page.getByRole('menuitem', { name: /Abrir projeto/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Editar' }).hover()
+  await expect(page.getByRole('menuitem', { name: /Desfazer/ })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Arquivo' }).click()
+  await page.getByRole('menuitem', { name: /Novo projeto/ }).click()
+  await expect(page.locator('.tab.active')).toHaveText('Main.form.json')
 })
 
 test('salvar recusa caminhos fora do projeto e tipos não permitidos', async () => {

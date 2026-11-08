@@ -39,6 +39,22 @@ async function center(l: Locator): Promise<{ x: number; y: number }> {
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
 }
 
+/** Espera o layout parar de mudar (os painéis se ajustam logo após a partida a frio). */
+async function settled(l: Locator): Promise<void> {
+  let prev = ''
+  await expect
+    .poll(
+      async () => {
+        const now = JSON.stringify(await l.boundingBox())
+        const same = now === prev
+        prev = now
+        return same
+      },
+      { intervals: [150, 150, 150, 150], timeout: 10_000 }
+    )
+    .toBe(true)
+}
+
 test.beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'vform-canvas-'))
   app = await electron.launch({ args: [MAIN] })
@@ -48,6 +64,7 @@ test.beforeEach(async () => {
   await page.getByRole('button', { name: 'Novo projeto' }).click()
   surface = page.getByTestId('surface')
   await expect(surface).toBeVisible()
+  await settled(surface)
 })
 
 test.afterEach(async () => {
@@ -101,6 +118,30 @@ test('mover, redimensionar, desfazer e refazer', async () => {
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('Shift+ArrowDown')
   expect(await geometry('button1')).toMatchObject({ x: 153, y: 106 })
+})
+
+test('o arraste fica preso ao canvas e bloqueia arraste nativo (não "solta" após poucos pixels)', async () => {
+  await palette('Button').dragTo(surface, { targetPosition: { x: 102, y: 62 } })
+  const hasCapture = (): Promise<boolean> =>
+    page.evaluate(() => (document.querySelector('[data-testid="surface"]') as HTMLElement).hasPointerCapture(1))
+
+  const c = await center(node('button1'))
+  await page.mouse.move(c.x, c.y)
+  await page.mouse.down()
+  await page.mouse.move(c.x + 3, c.y + 1) // 1º movimento curto: antes parava aqui
+  expect(await hasCapture()).toBe(true)
+  await page.mouse.move(c.x + 90, c.y + 50, { steps: 30 })
+  expect(await geometry('button1')).toMatchObject({ x: 192, y: 112 })
+  await page.mouse.up()
+  expect(await hasCapture()).toBe(false)
+
+  // Nenhum arraste nativo pode começar dentro do canvas (ele cancelaria o ponteiro).
+  const prevented = await node('button1').evaluate((el) => {
+    const ev = new DragEvent('dragstart', { bubbles: true, cancelable: true })
+    el.dispatchEvent(ev)
+    return ev.defaultPrevented
+  })
+  expect(prevented).toBe(true)
 })
 
 test('soltar no Panel e arrastar para dentro dele muda o pai e mantém a posição', async () => {

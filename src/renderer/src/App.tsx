@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { useIde } from './store'
+import { MenuBar } from './editor/MenuBar'
 import { Toolbar } from './editor/Toolbar'
 import { Palette } from './editor/Palette'
 import { OutlineTree } from './editor/OutlineTree'
@@ -71,6 +72,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="app">
+      <MenuBar />
       <Toolbar />
       <div className="workspace">
         <Group orientation="horizontal">

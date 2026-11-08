@@ -2,9 +2,8 @@ export type Theme = 'dark' | 'light'
 
 const KEY = 'vform.theme'
 
-function systemTheme(): Theme {
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-}
+/** O visual padrão é o claro e suave; o escuro só entra se o usuário escolher. */
+const DEFAULT_THEME: Theme = 'light'
 
 function storedTheme(): Theme | null {
   try {
@@ -16,7 +15,7 @@ function storedTheme(): Theme | null {
 }
 
 export function currentTheme(): Theme {
-  return (document.documentElement.dataset.theme as Theme | undefined) ?? systemTheme()
+  return (document.documentElement.dataset.theme as Theme | undefined) ?? DEFAULT_THEME
 }
 
 export function setTheme(theme: Theme): void {
@@ -29,5 +28,5 @@ export function setTheme(theme: Theme): void {
 }
 
 export function initTheme(): void {
-  document.documentElement.dataset.theme = storedTheme() ?? systemTheme()
+  document.documentElement.dataset.theme = storedTheme() ?? DEFAULT_THEME
 }
