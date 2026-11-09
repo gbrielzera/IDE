@@ -5,7 +5,9 @@ export function Toolbar(): React.JSX.Element {
   const busy = useIde((s) => s.busy)
   const canUndo = useIde((s) => (s.tracked[s.activeForm ?? '']?.undo.length ?? 0) > 0)
   const canRedo = useIde((s) => (s.tracked[s.activeForm ?? '']?.redo.length ?? 0) > 0)
-  const { newProject, openProject, saveProject, undo, redo } = useIde.getState()
+  const canRun = useIde((s) => s.activeForm !== null && s.tracked[s.activeForm] !== undefined)
+  const running = useIde((s) => s.running)
+  const { newProject, openProject, saveProject, undo, redo, run, stop } = useIde.getState()
 
   return (
     <header className="toolbar">
@@ -26,8 +28,11 @@ export function Toolbar(): React.JSX.Element {
         Refazer
       </button>
       <span className="toolbar-sep" />
-      <button disabled title="Executar o formulário (F5) — chega no M3">
+      <button disabled={busy || !canRun} onClick={() => void run()} title="Executar o formulário (F5)">
         ▶ Executar
+      </button>
+      <button disabled={!running} onClick={() => void stop()} title="Parar a execução (Shift+F5)">
+        ■ Parar
       </button>
     </header>
   )

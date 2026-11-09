@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { forgetWindow, registerProjectIpc } from './projectFs'
+import { registerRunIpc } from './runner'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -37,6 +38,7 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   registerProjectIpc()
+  registerRunIpc()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

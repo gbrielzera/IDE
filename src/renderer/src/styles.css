@@ -884,3 +884,214 @@ button.link {
 ::-webkit-scrollbar-corner {
   background: var(--face);
 }
+
+/* ---------- Janela de execução (o formulário funcionando) ---------- */
+.run-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  background: #f0efea;
+}
+.run-root {
+  --f-face: #e9e8e1;
+  --f-hl: #ffffff;
+  --f-sh: #9a9990;
+  --f-dk: #5c5b55;
+  --f-text: #25251f;
+  --f-sel: #6f8fb5;
+  position: relative;
+  background: #f6f5f1;
+  color: var(--f-text);
+  font: 12px/1.35 Tahoma, 'Segoe UI', Verdana, sans-serif;
+  user-select: none;
+}
+.run-error {
+  padding: 20px;
+  color: var(--error);
+}
+.run-node {
+  position: absolute;
+}
+.run-ctl {
+  position: absolute;
+  inset: 0;
+  font-size: var(--c-size, 12px);
+  font-weight: var(--c-weight, 400);
+  font-style: var(--c-style, normal);
+  color: var(--c-color, var(--f-text));
+}
+.run-children {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.run-children > .run-node {
+  pointer-events: auto;
+}
+.r-label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--c-bg, transparent);
+}
+.r-button,
+.r-tab {
+  font: inherit;
+  color: inherit;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  border: 1px solid;
+  border-color: var(--f-hl) var(--f-dk) var(--f-dk) var(--f-hl);
+  box-shadow: inset -1px -1px 0 var(--f-sh);
+  background: var(--c-bg, var(--f-face));
+}
+.r-button {
+  width: 100%;
+  height: 100%;
+}
+.r-button:active:not(:disabled) {
+  border-color: var(--f-dk) var(--f-hl) var(--f-hl) var(--f-dk);
+  box-shadow: inset 1px 1px 0 var(--f-sh);
+  padding: 1px 0 0 1px;
+}
+.r-button:disabled,
+.r-tab:disabled {
+  color: #8a897f;
+  text-shadow: 1px 1px 0 #fff;
+}
+.r-input {
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--c-bg, #fff);
+  border: 1px solid;
+  border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
+  box-shadow: inset 1px 1px 0 var(--f-dk);
+  border-radius: 0;
+  padding: 0 4px;
+  user-select: text;
+}
+.r-input:disabled {
+  color: #8a897f;
+}
+.r-input:focus {
+  outline: 1px dotted var(--f-text);
+  outline-offset: -3px;
+}
+.r-textarea {
+  padding: 3px 4px;
+  resize: none;
+}
+.r-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  background: var(--c-bg, transparent);
+}
+.r-check input {
+  margin: 0;
+}
+.r-radios {
+  width: 100%;
+  height: 100%;
+  background: var(--c-bg, transparent);
+}
+.r-list {
+  overflow: auto;
+  padding: 2px;
+}
+.r-list-item {
+  padding: 1px 3px;
+}
+.r-list-item.on {
+  background: var(--f-sel);
+  color: #fff;
+}
+.r-list.is-disabled {
+  color: #8a897f;
+}
+.r-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #8a897f;
+  background: var(--c-bg, repeating-linear-gradient(45deg, #f4f3ee, #f4f3ee 8px, #e9e8e1 8px, #e9e8e1 16px));
+  border: 1px solid;
+  border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
+}
+.r-panel {
+  width: 100%;
+  height: 100%;
+  border: 1px solid;
+  border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
+  background: var(--c-bg, rgba(150, 148, 138, 0.1));
+}
+.r-tabs {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+.r-tabbar {
+  display: flex;
+  align-items: flex-end;
+  height: 24px; /* = TABS_HEADER_HEIGHT */
+  padding-left: 2px;
+}
+.r-tab {
+  margin-top: 2px;
+  padding: 2px 10px;
+  box-shadow: none;
+  border-color: var(--f-hl) var(--f-dk) transparent var(--f-hl);
+  background: var(--f-face);
+}
+.r-tab.on {
+  position: relative;
+  z-index: 1;
+  margin-top: 0;
+  margin-bottom: -1px;
+  padding-top: 4px;
+}
+.r-tabbody {
+  flex: 1;
+  background: var(--c-bg, var(--f-face));
+  border: 1px solid;
+  border-color: var(--f-hl) var(--f-dk) var(--f-dk) var(--f-hl);
+  box-shadow: inset -1px -1px 0 var(--f-sh);
+}
+.r-table {
+  overflow: auto;
+  padding: 0;
+}
+.r-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.r-table th {
+  position: sticky;
+  top: 0;
+  padding: 2px 6px;
+  text-align: left;
+  font-weight: 700;
+  background: var(--f-face);
+  border: 1px solid;
+  border-color: var(--f-hl) var(--f-dk) var(--f-dk) var(--f-hl);
+}
+.r-table td {
+  padding: 1px 6px;
+}
+.r-table tbody tr.on {
+  background: var(--f-sel);
+  color: #fff;
+}
+.r-unknown {
+  color: #b3261e;
+}

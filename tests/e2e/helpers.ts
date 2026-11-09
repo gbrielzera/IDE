@@ -11,9 +11,11 @@ export type Point = { x: number; y: number }
  * Abre o app com um perfil (localStorage, preferências) novo e descartável: cada teste começa do
  * zero e nada vaza entre testes nem para o perfil do app de verdade.
  */
-export async function launchApp(): Promise<{ app: ElectronApplication; cleanup: () => Promise<void> }> {
+export async function launchApp(
+  env: Record<string, string> = {}
+): Promise<{ app: ElectronApplication; cleanup: () => Promise<void> }> {
   const profile = await mkdtemp(join(tmpdir(), 'vform-profile-'))
-  const app = await electron.launch({ args: [MAIN, `--user-data-dir=${profile}`] })
+  const app = await electron.launch({ args: [MAIN, `--user-data-dir=${profile}`], env: { ...process.env, ...env } as Record<string, string> })
   return {
     app,
     cleanup: async () => {
@@ -31,9 +33,9 @@ export class Studio {
   dir = ''
   surface!: Locator
 
-  async start(): Promise<void> {
+  async start(env: Record<string, string> = {}): Promise<void> {
     this.dir = await mkdtemp(join(tmpdir(), 'vform-e2e-'))
-    const launched = await launchApp()
+    const launched = await launchApp(env)
     this.app = launched.app
     this.cleanupApp = launched.cleanup
     this.page = await this.app.firstWindow()
@@ -128,6 +130,18 @@ export class Studio {
         { intervals: [150, 150, 150, 150], timeout: 10_000 }
       )
       .toBe(true)
+  }
+
+  /** Executa o formulário (F5) e devolve a janela de execução, já com o formulário renderizado. */
+  async runForm(): Promise<Page> {
+    const [runPage] = await Promise.all([this.app.waitForEvent('window'), this.page.keyboard.press('F5')])
+    await runPage.waitForSelector('.run-root')
+    return runPage
+  }
+
+  /** Texto de todas as linhas do console da IDE. */
+  consoleLines(): Promise<string[]> {
+    return this.page.locator('.console-line').allTextContents()
   }
 
   /** Confirma um campo de texto do painel de propriedades (Enter) escrevendo o valor. */

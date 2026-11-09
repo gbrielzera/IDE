@@ -20,6 +20,11 @@ function useShortcuts(): void {
     function onKey(e: KeyboardEvent): void {
       if (e.altKey) return
       const ide = useIde.getState()
+      if (e.key === 'F5') {
+        e.preventDefault()
+        void (e.shiftKey ? ide.stop() : ide.run())
+        return
+      }
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
 
@@ -66,8 +71,22 @@ function useShortcuts(): void {
   }, [])
 }
 
+/** Saída do Python e fim da execução vêm do processo principal. */
+function useRunEvents(): void {
+  useEffect(() => {
+    const api = window.vform.run
+    const offConsole = api.onConsole((m) => useIde.getState().log(m.level, m.text))
+    const offEnded = api.onEnded((e) => useIde.getState().runEnded(e))
+    return () => {
+      offConsole()
+      offEnded()
+    }
+  }, [])
+}
+
 export function App(): React.JSX.Element {
   useShortcuts()
+  useRunEvents()
   const hasProject = useIde((s) => s.project !== null)
 
   return (

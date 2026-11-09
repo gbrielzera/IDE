@@ -1,4 +1,5 @@
 // Tipos do arquivo de projeto, compartilhados entre main, preload e renderer.
+import type { RunApi } from './run'
 
 export const PROJECT_FILE = 'project.json'
 export const PROJECT_FORMAT = 'vform-project'
@@ -63,6 +64,7 @@ export interface VformApi {
   newProject(): Promise<ProjectResult>
   openProject(): Promise<ProjectResult>
   saveProject(files: Record<string, string>): Promise<SaveResult>
+  run: RunApi
 }
 
 export function newFormDocument(name: string): FormDocument {
@@ -72,7 +74,8 @@ export function newFormDocument(name: string): FormDocument {
 export function newFormScript(name: string): string {
   return [
     `# Lógica do formulário ${name}.`,
-    '# Acesse os componentes pelo ID, por exemplo: form.txtNome.value',
+    '# Componentes pelo ID:  form.txtNome.value   |   Eventos:  @form.btnOk.on_click',
+    '# A janela:  app.title = "Meu app"  |  app.show_message("Olá")  |  app.close()',
     '',
     '@form.on_load',
     'def ao_carregar():',

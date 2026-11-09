@@ -24,6 +24,8 @@ import { allIds, locate, topmost } from './core/tree'
 import { idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
 import { layoutOf } from './core/props'
+import { buildRunComponents } from './core/runstate'
+import type { RunEnded } from '@shared/run'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -44,6 +46,9 @@ interface IdeState {
   tracked: Record<string, Tracked>
   /** IDs dos componentes selecionados no formulário ativo. */
   selection: string[]
+  /** Há uma janela de execução aberta (e qual: avisos de execuções antigas são ignorados). */
+  running: boolean
+  runId: number | null
 
   newProject(): Promise<void>
   openProject(): Promise<void>
@@ -63,6 +68,10 @@ interface IdeState {
   renameComponent(id: string, newId: string): string | null
   setProp(id: string, key: string, value: unknown, txn?: string): void
   setFormProps(props: { title?: string; width?: number; height?: number }): void
+  /** Executa o formulário ativo (layout atual + script do disco) numa janela própria. */
+  run(): Promise<void>
+  stop(): Promise<void>
+  runEnded(ended: RunEnded): void
   deleteSelection(): void
   duplicateSelection(): void
   nudgeSelection(dx: number, dy: number): void
@@ -120,6 +129,8 @@ export const useIde = create<IdeState>((set, get) => {
     console: [],
     tracked: {},
     selection: [],
+    running: false,
+    runId: null,
 
     newProject: () => load('new'),
     openProject: () => load('open'),
@@ -214,6 +225,35 @@ export const useIde = create<IdeState>((set, get) => {
 
     setFormProps(props) {
       get().edit((d) => setFormProps(d, props))
+    },
+
+    async run() {
+      const { project, activeForm, tracked, busy } = get()
+      if (!project || !activeForm || busy) return
+      const form = project.manifest.forms.find((f) => f.name === activeForm)
+      const t = tracked[activeForm]
+      if (!form || !t) {
+        get().log('error', 'O formulário ativo não pôde ser lido; corrija o arquivo para executar.')
+        return
+      }
+      const res = await window.vform.run.start({
+        formName: form.name,
+        scriptPath: form.script,
+        doc: t.doc,
+        components: buildRunComponents(t.doc)
+      })
+      if (res.ok) set({ running: true, runId: res.runId })
+      else get().log('error', res.error)
+    },
+
+    async stop() {
+      if (get().running) await window.vform.run.stop()
+    },
+
+    runEnded(ended) {
+      if (ended.runId !== get().runId) return // aviso de uma execução antiga (já substituída)
+      set({ running: false, runId: null })
+      if (ended.reason !== 'crashed') get().log('info', 'Execução encerrada.')
     },
 
     deleteSelection() {

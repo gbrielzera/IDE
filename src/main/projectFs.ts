@@ -25,8 +25,13 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+/** Pasta do projeto aberto numa janela (ou undefined). */
+export function getProjectDir(windowId: number): string | undefined {
+  return openDirs.get(windowId)
+}
+
 /** Resolve um caminho relativo garantindo que ele fique dentro da pasta do projeto. */
-function insideProject(dir: string, rel: string): string {
+export function insideProject(dir: string, rel: string): string {
   if (isAbsolute(rel)) throw new Error(`Caminho absoluto não permitido: ${rel}`)
   const full = resolve(dir, rel)
   const back = relative(dir, full)

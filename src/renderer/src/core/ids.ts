@@ -6,8 +6,11 @@ const PY_KEYWORDS = [
   'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'
 ]
 
-/** `form` é o próprio objeto do formulário no script, então um componente não pode ter esse nome. */
-const RESERVED = new Set([...PY_KEYWORDS, 'form'])
+/**
+ * Nomes que o script já usa: `form` é o objeto do formulário e `on_load` é o decorador dele
+ * (`form.on_load`), então nenhum componente pode ter esses nomes.
+ */
+const RESERVED = new Set([...PY_KEYWORDS, 'form', 'on_load'])
 
 const IDENTIFIER = /^[\p{L}_][\p{L}\p{N}_]*$/u
 

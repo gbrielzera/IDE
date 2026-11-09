@@ -1,10 +1,11 @@
-import { useRef, useState, type CSSProperties } from 'react'
+import { useRef, useState } from 'react'
 import type { FormDocument, FormNode } from '@shared/project'
 import { CATALOG_BY_TYPE } from '../components/catalog'
+import { childBoxStyle, childrenLayerStyle } from '../components/layoutStyle'
 import { appearanceStyle, renderContent } from '../components/render'
 import { MIN_SIZE, moveToIndex, reparentNodes, setRects } from '../core/commands'
 import { activeTab, getProp, layoutOf, type LayoutMode } from '../core/props'
-import { insetTop, locate, topmost } from '../core/tree'
+import { locate, topmost } from '../core/tree'
 import { useIde } from '../store'
 
 export const DRAG_MIME = 'application/x-vform-type'
@@ -13,13 +14,6 @@ const DRAG_THRESHOLD = 4
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
-
-const ALIGN: Record<string, CSSProperties['alignItems']> = {
-  start: 'flex-start',
-  center: 'center',
-  end: 'flex-end',
-  stretch: 'stretch'
-}
 
 interface Box {
   x: number
@@ -117,29 +111,9 @@ function NodeView({ node, parent, selected, showHandles, onNodeDown, onHandleDow
   const auto = parentLayout && parentLayout.mode !== 'absolute' ? parentLayout : null
 
   // Em auto-layout o pai posiciona o filho (x/y não valem); no resto, posição absoluta.
-  let style: CSSProperties
-  if (auto) {
-    style = {
-      position: 'relative',
-      flex: 'none',
-      width: auto.align === 'stretch' && auto.mode === 'vertical' ? undefined : node.width,
-      height: auto.align === 'stretch' && auto.mode === 'horizontal' ? undefined : node.height
-    }
-  } else {
-    style = { left: node.x, top: node.y, width: node.width, height: node.height }
-  }
-
+  const style = childBoxStyle(node, auto)
   const own = layoutOf(node)
-  const layerStyle: CSSProperties = { top: insetTop(node) }
-  if (own.mode !== 'absolute') {
-    Object.assign(layerStyle, {
-      display: 'flex',
-      flexDirection: own.mode === 'vertical' ? 'column' : 'row',
-      gap: own.gap,
-      padding: own.padding,
-      alignItems: ALIGN[own.align]
-    })
-  }
+  const layerStyle = childrenLayerStyle(node)
 
   const classes = ['node']
   if (isSelected) classes.push('selected')

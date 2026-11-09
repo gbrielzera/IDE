@@ -23,6 +23,8 @@ export function MenuBar(): React.JSX.Element {
   const canUndo = useIde((s) => (s.tracked[s.activeForm ?? '']?.undo.length ?? 0) > 0)
   const canRedo = useIde((s) => (s.tracked[s.activeForm ?? '']?.redo.length ?? 0) > 0)
   const hasSelection = useIde((s) => s.selection.length > 0)
+  const canRun = useIde((s) => s.activeForm !== null && s.tracked[s.activeForm] !== undefined)
+  const running = useIde((s) => s.running)
   const ide = useIde.getState()
 
   // Fecha o menu ao clicar fora ou apertar Esc.
@@ -73,7 +75,10 @@ export function MenuBar(): React.JSX.Element {
     },
     {
       label: 'Executar',
-      items: [{ label: 'Executar formulário', shortcut: 'F5', disabled: true }]
+      items: [
+        { label: 'Executar formulário', shortcut: 'F5', disabled: busy || !canRun, onClick: () => void ide.run() },
+        { label: 'Parar', shortcut: 'Shift+F5', disabled: !running, onClick: () => void ide.stop() }
+      ]
     }
   ]
 
