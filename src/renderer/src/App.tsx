@@ -11,6 +11,12 @@ import { ConsolePanel } from './editor/ConsolePanel'
 import { StatusBar } from './editor/StatusBar'
 import { Welcome } from './editor/Welcome'
 
+/** Espera depois da última alteração antes de salvar sozinho. */
+const AUTOSAVE_DELAY_MS = 1500
+
+/** Pausa depois da última alteração antes de atualizar a pré-visualização ao vivo. */
+const LIVE_PREVIEW_DELAY_MS = 700
+
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
 }
@@ -38,6 +44,9 @@ function useShortcuts(): void {
           handlers.z = e.shiftKey ? ide.redo : ide.undo
           handlers.y = ide.redo
           handlers.d = ide.duplicateSelection
+          handlers.c = ide.copySelection
+          handlers.x = ide.cutSelection
+          handlers.v = ide.pasteClipboard
         }
         const run = handlers[k]
         if (run) {
@@ -84,9 +93,58 @@ function useRunEvents(): void {
   }, [])
 }
 
+/** Preferências guardadas pelo processo principal, e o salvamento automático (se ligado). */
+function useSettingsAndAutosave(): void {
+  useEffect(() => {
+    void useIde.getState().loadSettings()
+    let timer: number | undefined
+    const unsubscribe = useIde.subscribe((s) => {
+      if (!s.settings.autosave || !s.dirty || s.busy || !s.project) return
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const now = useIde.getState()
+        if (now.settings.autosave && now.dirty && !now.busy) void now.saveProject({ silent: true })
+      }, AUTOSAVE_DELAY_MS)
+    })
+    return () => {
+      unsubscribe()
+      window.clearTimeout(timer)
+    }
+  }, [])
+}
+
+/**
+ * Pré-visualização ao vivo: com a opção ligada e uma janela de execução aberta, qualquer mudança no formulário
+ * em execução ou no script dele atualiza a janela (depois de uma pausa, para não reiniciar a cada tecla).
+ */
+function useLivePreview(): void {
+  useEffect(() => {
+    let timer: number | undefined
+    let last: { doc: unknown; script: unknown; form: string | null } | null = null
+    const unsubscribe = useIde.subscribe((s) => {
+      const form = s.runForm
+      const now = { doc: form ? s.tracked[form]?.doc : undefined, script: form ? s.scripts[form] : undefined, form }
+      const changed = last !== null && last.form === now.form && (last.doc !== now.doc || last.script !== now.script)
+      last = now
+      if (!changed || !s.settings.livePreview || !s.running) return
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const st = useIde.getState()
+        if (st.settings.livePreview && st.running) void st.run({ refresh: true })
+      }, LIVE_PREVIEW_DELAY_MS)
+    })
+    return () => {
+      unsubscribe()
+      window.clearTimeout(timer)
+    }
+  }, [])
+}
+
 export function App(): React.JSX.Element {
   useShortcuts()
+  useLivePreview()
   useRunEvents()
+  useSettingsAndAutosave()
   const hasProject = useIde((s) => s.project !== null)
 
   return (

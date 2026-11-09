@@ -1,5 +1,6 @@
 // Tipos do arquivo de projeto, compartilhados entre main, preload e renderer.
 import type { RunApi } from './run'
+import type { SettingsApi } from './settings'
 
 export const PROJECT_FILE = 'project.json'
 export const PROJECT_FORMAT = 'vform-project'
@@ -65,6 +66,7 @@ export interface VformApi {
   openProject(): Promise<ProjectResult>
   saveProject(files: Record<string, string>): Promise<SaveResult>
   run: RunApi
+  settings: SettingsApi
 }
 
 export function newFormDocument(name: string): FormDocument {

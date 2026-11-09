@@ -1,4 +1,5 @@
 import { useIde } from '../store'
+import { toggleTheme, useTheme } from '../theme'
 
 export function Toolbar(): React.JSX.Element {
   const hasProject = useIde((s) => s.project !== null)
@@ -7,6 +8,8 @@ export function Toolbar(): React.JSX.Element {
   const canRedo = useIde((s) => (s.tracked[s.activeForm ?? '']?.redo.length ?? 0) > 0)
   const canRun = useIde((s) => s.activeForm !== null && s.tracked[s.activeForm] !== undefined)
   const running = useIde((s) => s.running)
+  const live = useIde((s) => s.settings.livePreview)
+  const theme = useTheme()
   const { newProject, openProject, saveProject, undo, redo, run, stop } = useIde.getState()
 
   return (
@@ -33,6 +36,23 @@ export function Toolbar(): React.JSX.Element {
       </button>
       <button disabled={!running} onClick={() => void stop()} title="Parar a execução (Shift+F5)">
         ■ Parar
+      </button>
+      <button
+        onClick={() => void useIde.getState().setSetting('livePreview', !live)}
+        aria-pressed={live}
+        data-testid="toggle-live"
+        title="Pré-visualização ao vivo: a janela de execução se atualiza sozinha quando você altera o formulário ou o script"
+      >
+        {live ? '● Ao vivo' : '○ Ao vivo'}
+      </button>
+      <span className="toolbar-spacer" />
+      <button
+        onClick={toggleTheme}
+        aria-pressed={theme === 'dark'}
+        title="Modo noturno: tema escuro, mais confortável à noite"
+        data-testid="toggle-night"
+      >
+        {theme === 'dark' ? '☀ Modo claro' : '☾ Modo noturno'}
       </button>
     </header>
   )

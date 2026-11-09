@@ -13,14 +13,17 @@ import {
   type SaveResult
 } from '@shared/project'
 import { writeFileSafely } from './safeWrite'
+import { getSettings, updateSettings } from './settings'
 
 /** Pasta do projeto aberto em cada janela. O renderer nunca escolhe onde gravar. */
 const openDirs = new Map<number, string>()
 
 const SAVABLE_EXTENSIONS = new Set(['.json', '.py'])
 
-/** Última pasta de projeto usada: os seletores já abrem nela. */
-let lastDir: string | undefined
+/** Guarda a pasta do projeto como "última usada" (persistente: vale na próxima vez que o app abrir). */
+function rememberDir(dir: string): void {
+  void updateSettings({ lastDir: dir })
+}
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -65,9 +68,10 @@ async function readProject(dir: string): Promise<LoadedProject> {
 }
 
 async function pickFolder(win: BrowserWindow, title: string): Promise<string | null> {
+  const { lastDir } = await getSettings()
   const res = await dialog.showOpenDialog(win, {
     title,
-    defaultPath: lastDir,
+    defaultPath: lastDir ? dirname(lastDir) : undefined, // novo projeto: ao lado do último
     properties: ['openDirectory', 'createDirectory']
   })
   return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
@@ -78,7 +82,6 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   if (!win) return { ok: false, error: 'Janela não encontrada.' }
   const dir = await pickFolder(win, 'Escolha uma pasta vazia para o novo projeto')
   if (!dir) return { ok: false, canceled: true }
-  lastDir = dir
   try {
     if (await exists(join(dir, PROJECT_FILE)))
       return { ok: false, error: 'Essa pasta já contém um projeto. Use "Abrir projeto".' }
@@ -94,6 +97,7 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
     await fs.writeFile(join(dir, `${formName}.py`), newFormScript(formName), 'utf8')
     const project = await readProject(dir)
     openDirs.set(win.id, dir)
+    rememberDir(dir)
     return { ok: true, project }
   } catch (err) {
     return { ok: false, error: errorMessage(err) }
@@ -105,6 +109,7 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
  * o que dá a impressão de pasta vazia. Aqui o usuário enxerga e escolhe o project.json.
  */
 async function pickProjectFile(win: BrowserWindow): Promise<string | null> {
+  const { lastDir } = await getSettings()
   const res = await dialog.showOpenDialog(win, {
     title: `Abrir projeto — selecione o ${PROJECT_FILE}`,
     defaultPath: lastDir,
@@ -132,10 +137,10 @@ async function openProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   if (!picked) return { ok: false, canceled: true }
   try {
     const dir = await projectDirFrom(picked)
-    lastDir = dir
     if (!(await exists(join(dir, PROJECT_FILE)))) return { ok: false, error: `A pasta não tem ${PROJECT_FILE}.` }
     const project = await readProject(dir)
     openDirs.set(win.id, dir)
+    rememberDir(dir)
     return { ok: true, project }
   } catch (err) {
     return { ok: false, error: errorMessage(err) }

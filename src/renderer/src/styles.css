@@ -5,21 +5,22 @@
 
 :root,
 :root[data-theme='light'] {
-  --face: #f0efea; /* botões, painéis, barras */
-  --face-2: #e6e5de; /* áreas levemente mais escuras */
-  --paper: #fdfdfb; /* listas, console, campos */
+  /* Tons ~20% menos claros que a primeira versão (luminosidade × 0,8, com saturação reduzida): cansa menos a vista. */
+  --face: #c3c1b9; /* botões, painéis, barras */
+  --face-2: #b9b8b0; /* áreas levemente mais escuras */
+  --paper: #e3e3d9; /* listas, console, campos */
   --hl: #ffffff; /* realce da borda em relevo */
-  --shadow: #a9a89f;
-  --dkshadow: #6b6a64;
+  --shadow: #8a8983;
+  --dkshadow: #61615d;
   --text: #25251f;
-  --text-muted: #6d6c65;
+  --text-muted: #63625e;
   --title-1: #5f80a8; /* barra de título: degradê azul acinzentado */
   --title-2: #b0c1d8;
   --title-text: #ffffff;
-  --sel-bg: #cbdaec; /* seleção em listas e menus */
+  --sel-bg: #adbfd5; /* seleção em listas e menus */
   --sel-text: #1c2430;
   --accent-dark: #41618a;
-  --workspace: #dcdbd3; /* fundo atrás do formulário */
+  --workspace: #b1b0a8; /* fundo atrás do formulário */
   --grid-dot: rgba(120, 118, 108, 0.28);
   --warn: #8a6100;
   --error: #b3261e;
@@ -205,6 +206,9 @@ button.link {
   border-color: var(--dkshadow) var(--hl) var(--hl) var(--dkshadow);
   box-shadow: inset 1px 1px 0 var(--shadow);
 }
+.toolbar-spacer {
+  flex: 1;
+}
 .toolbar-sep {
   width: 2px;
   height: 20px;
@@ -373,6 +377,7 @@ button.link {
 
 /* Janela do formulário */
 .form-frame {
+  width: fit-content; /* a moldura abraça a área do formulário (que tem o tamanho exato do formulário) */
   margin: 0 auto;
   padding: 3px;
   background: #f0efea;
@@ -421,6 +426,7 @@ button.link {
 
 /* Área cliente do formulário (cores fixas: é o app final, não a IDE) */
 .form-surface {
+  box-sizing: content-box; /* largura/altura = área útil exata; a borda fica por fora */
   --f-face: #e9e8e1;
   --f-hl: #ffffff;
   --f-sh: #9a9990;
@@ -1135,4 +1141,117 @@ button.link {
 }
 body:has(.fatal-error) {
   overflow: auto;
+}
+
+/* ---------- Guias, alças do formulário e réguas ---------- */
+.guide {
+  position: absolute;
+  z-index: 5;
+  background: #d6336c;
+  pointer-events: none;
+}
+.guide-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.guide-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.form-frame {
+  position: relative;
+}
+.form-grip {
+  position: absolute;
+  z-index: 6;
+}
+.form-grip-e {
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+}
+.form-grip-s {
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 9px;
+  cursor: ns-resize;
+}
+.form-grip-se {
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+.form-grip:hover {
+  background: rgba(65, 97, 138, 0.35);
+}
+.design-wrap {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+}
+.design-wrap .form-frame {
+  margin: 0;
+}
+.design-wrap.with-rulers {
+  padding: 20px 0 0 20px;
+}
+.ruler {
+  position: absolute;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-muted);
+  background-color: var(--face);
+  user-select: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* Origem do formulário: 5px à direita e 30px abaixo do canto da moldura (borda, margem, título). */
+.ruler-h {
+  top: 0;
+  left: 25px;
+  height: 18px;
+  background-image:
+    repeating-linear-gradient(90deg, var(--shadow) 0 1px, transparent 1px 10px),
+    repeating-linear-gradient(90deg, var(--dkshadow) 0 1px, transparent 1px 50px);
+  background-size:
+    100% 4px,
+    100% 9px;
+  background-position:
+    0 100%,
+    0 100%;
+  background-repeat: no-repeat;
+}
+.ruler-v {
+  left: 0;
+  top: 50px;
+  width: 18px;
+  background-image:
+    repeating-linear-gradient(0deg, var(--shadow) 0 1px, transparent 1px 10px),
+    repeating-linear-gradient(0deg, var(--dkshadow) 0 1px, transparent 1px 50px);
+  background-size:
+    4px 100%,
+    9px 100%;
+  background-position:
+    100% 0,
+    100% 0;
+  background-repeat: no-repeat;
+}
+.ruler-h span {
+  position: absolute;
+  top: 1px;
+  padding-left: 2px;
+}
+.ruler-v span {
+  position: absolute;
+  left: 1px;
+  padding-top: 2px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
 }

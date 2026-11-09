@@ -1,11 +1,15 @@
 import { create } from 'zustand'
 import { PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
+import { alignNodes, canAlign, canDistribute, distributeNodes, type AlignMode, type Axis } from './core/align'
+import { clampRect, contentSize } from './core/bounds'
+import { CATALOG_BY_TYPE } from './components/catalog'
 import {
   addNode,
   createNode,
   deleteNodes,
   duplicateNodes,
   moveToIndex,
+  pasteNodes,
   renameNode,
   setFormProps,
   setProp,
@@ -23,10 +27,12 @@ import {
 import { allIds, locate, topmost } from './core/tree'
 import { idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
-import { layoutOf } from './core/props'
+import { isAutoLayout, layoutOf } from './core/props'
+import type { FormNode } from '@shared/project'
 import { buildRunComponents } from './core/runstate'
 import { ensureHandler, eventForDoubleClick } from './core/script'
-import type { RunConsoleMessage, RunEnded } from '@shared/run'
+import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded } from '@shared/run'
+import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -60,6 +66,8 @@ interface IdeState {
   /** Há uma janela de execução aberta (e qual: avisos de execuções antigas são ignorados). */
   running: boolean
   runId: number | null
+  /** Formulário da execução em andamento (a pré-visualização ao vivo o acompanha, mesmo se você abrir outro). */
+  runForm: string | null
   /** Texto do script de cada formulário (a fonte da verdade enquanto o projeto está aberto). */
   scripts: Record<string, string>
   /** Scripts alterados na IDE e ainda não salvos: só esses são gravados (os outros podem ter sido editados fora). */
@@ -70,6 +78,14 @@ interface IdeState {
    * copiar a cada atualização devolveria à tela um eco atrasado do que foi digitado e apagaria teclas.
    */
   scriptSync: Record<string, number>
+  /** Componentes copiados (área de transferência interna da IDE; vale entre formulários). */
+  clipboard: FormNode[] | null
+  /** Quantas vezes o mesmo conteúdo foi colado em sequência (cada colagem se desloca um pouco mais). */
+  pasteCount: number
+  /** Preferências do app (persistem entre execuções). */
+  settings: Settings
+  loadSettings(): Promise<void>
+  setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void>
   /** O que a área central mostra: o formulário (design) ou o script (code). */
   activeView: View
   /** Pedido para o editor levar o cursor a uma linha (o `nonce` distingue pedidos repetidos). */
@@ -79,7 +95,8 @@ interface IdeState {
 
   newProject(): Promise<void>
   openProject(): Promise<void>
-  saveProject(): Promise<void>
+  /** `silent`: salvamento automático (não polui o console a cada alteração). */
+  saveProject(opts?: { silent?: boolean }): Promise<void>
   setActiveForm(name: string): void
   openTab(form: string, view: View): void
   log(level: LogLevel, text: string, meta?: { line?: number; file?: string }): void
@@ -97,7 +114,8 @@ interface IdeState {
   setProp(id: string, key: string, value: unknown, txn?: string): void
   setFormProps(props: { title?: string; width?: number; height?: number }): void
   /** Executa o formulário ativo (layout atual + script do disco) numa janela própria. */
-  run(): Promise<void>
+  /** `refresh`: pré-visualização ao vivo (atualiza a janela aberta, sem abrir outra). */
+  run(opts?: { refresh?: boolean }): Promise<void>
   stop(): Promise<void>
   runEnded(ended: RunEnded): void
   /** Mensagem do console vinda do Python: vai para o console e, se for erro com linha, marca o script. */
@@ -111,10 +129,20 @@ interface IdeState {
   clearReveal(): void
   deleteSelection(): void
   duplicateSelection(): void
+  copySelection(): void
+  cutSelection(): void
+  pasteClipboard(): void
+  /** Altera posição/tamanho de um componente respeitando a área do pai (ele nunca sai do formulário). */
+  setNodeRect(id: string, rect: Partial<{ x: number; y: number; width: number; height: number }>): void
+  alignSelection(mode: AlignMode): void
+  distributeSelection(axis: Axis): void
   nudgeSelection(dx: number, dy: number): void
 }
 
 let nextLineId = 1
+
+/** Deslocamento (px) de cada colagem sucessiva do mesmo conteúdo. */
+const DUPLICATE_STEP = 16
 let nextRevealNonce = 1
 
 const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path
@@ -198,9 +226,13 @@ export const useIde = create<IdeState>((set, get) => {
     selection: [],
     running: false,
     runId: null,
+    runForm: null,
     scripts: {},
     scriptDirty: {},
     scriptSync: {},
+    clipboard: null,
+    pasteCount: 0,
+    settings: DEFAULT_SETTINGS,
     activeView: 'design',
     reveal: null,
     runErrors: {},
@@ -208,7 +240,16 @@ export const useIde = create<IdeState>((set, get) => {
     newProject: () => load('new'),
     openProject: () => load('open'),
 
-    async saveProject() {
+    async loadSettings() {
+      set({ settings: await window.vform.settings.get() })
+    },
+
+    async setSetting(key, value) {
+      set((s) => ({ settings: { ...s.settings, [key]: value } })) // vale já; a gravação em disco vem depois
+      set({ settings: await window.vform.settings.set({ [key]: value }) })
+    },
+
+    async saveProject(opts) {
       const { project, tracked, scripts, scriptDirty, busy } = get()
       if (!project || busy) return
       set({ busy: true })
@@ -224,7 +265,7 @@ export const useIde = create<IdeState>((set, get) => {
         const res = await window.vform.saveProject(files)
         if (res.ok) {
           set({ project: { ...project, files: { ...project.files, ...files } }, scriptDirty: {}, dirty: false })
-          get().log('info', 'Projeto salvo.')
+          if (!opts?.silent) get().log('info', 'Projeto salvo.')
         } else {
           get().log('error', `Falha ao salvar: ${res.error}`)
         }
@@ -288,6 +329,14 @@ export const useIde = create<IdeState>((set, get) => {
       if (!doc) return
       const node = createNode(doc, type, x, y)
       if (!node) return
+      // Fica dentro da área do pai (em auto-layout o pai posiciona; x/y não valem).
+      const host = parentId ? locate(doc, parentId)?.node : undefined
+      const parent = host && CATALOG_BY_TYPE[host.type]?.container ? host : null
+      if (!parent || !isAutoLayout(parent)) {
+        const at = clampRect(node, contentSize(doc, parent?.id ?? null))
+        node.x = at.x
+        node.y = at.y
+      }
       get().edit((d) => addNode(d, parentId, node, index))
       set({ selection: [node.id] })
     },
@@ -311,17 +360,21 @@ export const useIde = create<IdeState>((set, get) => {
       get().edit((d) => setFormProps(d, props))
     },
 
-    async run() {
-      const { project, activeForm, tracked, busy } = get()
-      if (!project || !activeForm || busy) return
-      const form = project.manifest.forms.find((f) => f.name === activeForm)
-      const t = tracked[activeForm]
+    async run(opts) {
+      const { project, tracked, busy } = get()
+      const refresh = opts?.refresh === true
+      // Ao vivo, atualiza o formulário que já está em execução, não o que está na tela agora.
+      const target = refresh ? get().runForm : get().activeForm
+      if (!project || !target || busy) return
+      const form = project.manifest.forms.find((f) => f.name === target)
+      const t = tracked[target]
       if (!form || !t) {
         get().log('error', 'O formulário ativo não pôde ser lido; corrija o arquivo para executar.')
         return
       }
       set({ runErrors: {} })
       const res = await window.vform.run.start({
+        reuse: refresh,
         formName: form.name,
         scriptPath: form.script,
         // Texto alterado no editor e ainda não salvo vale; senão o main lê o arquivo do disco (edição externa).
@@ -329,8 +382,8 @@ export const useIde = create<IdeState>((set, get) => {
         doc: t.doc,
         components: buildRunComponents(t.doc)
       })
-      if (res.ok) set({ running: true, runId: res.runId })
-      else get().log('error', res.error)
+      if (res.ok) set({ running: true, runId: res.runId, runForm: form.name })
+      else if (!(refresh && res.error === NO_PREVIEW_WINDOW)) get().log('error', res.error)
     },
 
     async stop() {
@@ -339,7 +392,7 @@ export const useIde = create<IdeState>((set, get) => {
 
     runEnded(ended) {
       if (ended.runId !== get().runId) return // aviso de uma execução antiga (já substituída)
-      set({ running: false, runId: null })
+      set({ running: false, runId: null, runForm: null })
       if (ended.reason !== 'crashed') get().log('info', 'Execução encerrada.')
     },
 
@@ -409,6 +462,61 @@ export const useIde = create<IdeState>((set, get) => {
       if (created.length > 0) set({ selection: created })
     },
 
+    copySelection() {
+      const doc = get().currentDoc()
+      if (!doc) return
+      const nodes = selectionRoots()
+        .map((id) => locate(doc, id)?.node)
+        .filter((n): n is FormNode => n !== undefined)
+        .map((n) => JSON.parse(JSON.stringify(n)) as FormNode)
+      if (nodes.length > 0) set({ clipboard: nodes, pasteCount: 0 })
+    },
+
+    cutSelection() {
+      get().copySelection()
+      get().deleteSelection()
+    },
+
+    pasteClipboard() {
+      const { clipboard, pasteCount, selection } = get()
+      const doc = get().currentDoc()
+      if (!doc || !clipboard || clipboard.length === 0) return
+      // Dentro do container selecionado; senão, ao lado do componente selecionado (mesmo pai).
+      let parentId: string | null = null
+      if (selection.length > 0) {
+        const first = locate(doc, selection[0])
+        if (first) parentId = selection.length === 1 && CATALOG_BY_TYPE[first.node.type]?.container ? first.node.id : (first.parent?.id ?? null)
+      }
+      let created: string[] = []
+      get().edit((d) => {
+        created = pasteNodes(d, parentId, clipboard, DUPLICATE_STEP * (pasteCount + 1))
+      })
+      if (created.length > 0) set({ selection: created, pasteCount: pasteCount + 1 })
+    },
+
+    setNodeRect(id, rect) {
+      const doc = get().currentDoc()
+      const loc = doc ? locate(doc, id) : null
+      if (!doc || !loc) return
+      const wanted = { ...loc.node, ...rect }
+      const fixed = loc.parent && isAutoLayout(loc.parent) ? wanted : clampRect(wanted, contentSize(doc, loc.parent?.id ?? null))
+      get().edit((d) => setRects(d, { [id]: { x: fixed.x, y: fixed.y, width: fixed.width, height: fixed.height } }))
+    },
+
+    alignSelection(mode) {
+      const doc = get().currentDoc()
+      const ids = selectionRoots()
+      if (!doc || !canAlign(doc, ids)) return
+      get().edit((d) => alignNodes(d, ids, mode))
+    },
+
+    distributeSelection(axis) {
+      const doc = get().currentDoc()
+      const ids = selectionRoots()
+      if (!doc || !canDistribute(doc, ids)) return
+      get().edit((d) => distributeNodes(d, ids, axis))
+    },
+
     nudgeSelection(dx, dy) {
       const doc = get().currentDoc()
       const ids = selectionRoots()
@@ -424,7 +532,8 @@ export const useIde = create<IdeState>((set, get) => {
           const dir = Math.sign(layout.mode === 'vertical' ? dy : dx)
           if (dir !== 0) reorders.push([id, loc.parent.id, loc.index + dir])
         } else {
-          rects[id] = { x: Math.max(0, loc.node.x + dx), y: Math.max(0, loc.node.y + dy) }
+          const at = clampRect({ ...loc.node, x: loc.node.x + dx, y: loc.node.y + dy }, contentSize(doc, loc.parent?.id ?? null))
+          rects[id] = { x: at.x, y: at.y }
         }
       }
       get().edit((d) => {

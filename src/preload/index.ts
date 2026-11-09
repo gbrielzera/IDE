@@ -12,6 +12,10 @@ const api: VformApi = {
   newProject: () => ipcRenderer.invoke('project:new'),
   openProject: () => ipcRenderer.invoke('project:open'),
   saveProject: (files) => ipcRenderer.invoke('project:save', files),
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch) => ipcRenderer.invoke('settings:set', patch)
+  },
   run: {
     start: (payload) => ipcRenderer.invoke('run:start', payload),
     stop: () => ipcRenderer.invoke('run:stop'),
@@ -20,7 +24,8 @@ const api: VformApi = {
     init: () => ipcRenderer.invoke('run:init'),
     ready: () => ipcRenderer.send('run:ready'),
     send: (msg) => ipcRenderer.send('run:send', msg),
-    onMessage: (cb) => subscribe('run:message', cb)
+    onMessage: (cb) => subscribe('run:message', cb),
+    onReload: (cb) => subscribe('run:reload', cb)
   }
 }
 

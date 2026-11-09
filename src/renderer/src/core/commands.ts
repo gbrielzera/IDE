@@ -2,6 +2,7 @@
 // Toda mutação passa por aqui; o histórico (history.ts) transforma cada uma em desfazer/refazer.
 import type { FormDocument, FormNode } from '@shared/project'
 import { CATALOG_BY_TYPE, COMMON_PROPS, defaultProps, propDef } from '../components/catalog'
+import { clampRect, contentSize, minContentSize } from './bounds'
 import { idProblem, uniqueId } from './ids'
 import { activeTab } from './props'
 import { absPos, allIds, insetTop, isInside, locate, topmost } from './tree'
@@ -14,6 +15,7 @@ export interface Rect {
 }
 
 export const MIN_SIZE = 8
+export const FORM_MAX_SIZE = 4000
 export const DUPLICATE_OFFSET = 16
 
 function clone<T>(value: T): T {
@@ -96,8 +98,10 @@ export function renameNode(doc: FormDocument, id: string, newId: string): void {
 
 export function setFormProps(doc: FormDocument, props: Partial<Pick<FormDocument, 'title' | 'width' | 'height'>>): void {
   if (props.title !== undefined) doc.title = props.title
-  if (props.width !== undefined) doc.width = Math.max(100, Math.round(props.width))
-  if (props.height !== undefined) doc.height = Math.max(100, Math.round(props.height))
+  // O formulário nunca fica menor que o necessário para conter os componentes (nada fica de fora).
+  const min = minContentSize(doc.children, null)
+  if (props.width !== undefined) doc.width = Math.min(FORM_MAX_SIZE, Math.max(100, min.width, Math.round(props.width)))
+  if (props.height !== undefined) doc.height = Math.min(FORM_MAX_SIZE, Math.max(100, min.height, Math.round(props.height)))
 }
 
 export function deleteNodes(doc: FormDocument, ids: readonly string[]): void {
@@ -125,6 +129,28 @@ export function duplicateNodes(doc: FormDocument, ids: readonly string[]): strin
     copy.x += DUPLICATE_OFFSET
     copy.y += DUPLICATE_OFFSET
     loc.list.splice(loc.index + 1, 0, copy)
+    created.push(copy.id)
+  }
+  return created
+}
+
+/**
+ * Cola cópias de componentes (com IDs novos) dentro do container indicado (ou do formulário), deslocadas e
+ * mantidas dentro da área. Funciona entre formulários: os IDs são gerados para o formulário de destino.
+ */
+export function pasteNodes(doc: FormDocument, parentId: string | null, nodes: readonly FormNode[], offset = DUPLICATE_OFFSET): string[] {
+  const host = parentId ? locate(doc, parentId)?.node : undefined
+  const target = host && isContainer(host) ? host : null
+  const size = contentSize(doc, target?.id ?? null)
+  const taken = allIds(doc)
+  const created: string[] = []
+  for (const source of nodes) {
+    const copy = clone(source)
+    renameTree(copy, taken)
+    const at = clampRect({ x: copy.x + offset, y: copy.y + offset, width: copy.width, height: copy.height }, size)
+    copy.x = at.x
+    copy.y = at.y
+    addNode(doc, target?.id ?? null, copy)
     created.push(copy.id)
   }
   return created

@@ -12,15 +12,18 @@ export type Point = { x: number; y: number }
  * zero e nada vaza entre testes nem para o perfil do app de verdade.
  */
 export async function launchApp(
-  env: Record<string, string> = {}
-): Promise<{ app: ElectronApplication; cleanup: () => Promise<void> }> {
-  const profile = await mkdtemp(join(tmpdir(), 'vform-profile-'))
+  env: Record<string, string> = {},
+  /** Perfil já existente (para reabrir o app "do mesmo usuário"); por padrão cria um novo e o apaga ao fechar. */
+  existingProfile?: string
+): Promise<{ app: ElectronApplication; profile: string; cleanup: () => Promise<void> }> {
+  const profile = existingProfile ?? (await mkdtemp(join(tmpdir(), 'vform-profile-')))
   const app = await electron.launch({ args: [MAIN, `--user-data-dir=${profile}`], env: { ...process.env, ...env } as Record<string, string> })
   return {
     app,
+    profile,
     cleanup: async () => {
       await app.close()
-      await rm(profile, { recursive: true, force: true })
+      if (!existingProfile) await rm(profile, { recursive: true, force: true })
     }
   }
 }
@@ -31,11 +34,13 @@ export class Studio {
   private cleanupApp!: () => Promise<void>
   page!: Page
   dir = ''
+  profile = ''
   surface!: Locator
 
-  async start(env: Record<string, string> = {}): Promise<void> {
+  async start(env: Record<string, string> = {}, existingProfile?: string): Promise<void> {
     this.dir = await mkdtemp(join(tmpdir(), 'vform-e2e-'))
-    const launched = await launchApp(env)
+    const launched = await launchApp(env, existingProfile)
+    this.profile = launched.profile
     this.app = launched.app
     this.cleanupApp = launched.cleanup
     this.page = await this.app.firstWindow()

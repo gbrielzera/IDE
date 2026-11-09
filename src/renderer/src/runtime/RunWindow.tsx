@@ -256,17 +256,23 @@ export function RunApp(): React.JSX.Element {
       for (const c of msg.changes) if (c.id === ':form' && c.prop === 'title') document.title = String(c.value)
       dispatch({ type: 'set', changes: msg.changes })
     })
-    void api.init().then((data) => {
-      if (!alive) return
-      if (!data) return setMissing(true)
-      document.title = data.doc.title
-      dispatch({ type: 'init', components: data.components })
-      setInit(data)
-      api.ready() // só agora o Python carrega o script: os patches dele já têm onde ser aplicados
-    })
+    const boot = (): void => {
+      void api.init().then((data) => {
+        if (!alive) return
+        if (!data) return setMissing(true)
+        document.title = data.doc.title
+        dispatch({ type: 'init', components: data.components })
+        setInit(data)
+        api.ready() // só agora o Python carrega o script: os patches dele já têm onde ser aplicados
+      })
+    }
+    boot()
+    // Pré-visualização ao vivo: a IDE trocou o formulário/script; recomeça com os dados novos.
+    const offReload = api.onReload(boot)
     return () => {
       alive = false
       off()
+      offReload()
     }
   }, [])
 

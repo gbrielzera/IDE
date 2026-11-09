@@ -2,9 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, type IpcMainEvent, type IpcMainInv
 import { existsSync, promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { FormDocument } from '@shared/project'
-import type { RunConsoleMessage, RunEnded, RunInit, RunPayload, RunStartResult, RunToPython } from '@shared/run'
+import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded, type RunInit, type RunPayload, type RunStartResult, type RunToPython } from '@shared/run'
 import { getProjectDir, insideProject } from './projectFs'
-import { findPython, PythonHost, type PyMessage } from './pythonHost'
+import { findPython, PythonHost, type PyMessage, type PythonCommand } from './pythonHost'
 
 interface Run {
   id: number
@@ -41,6 +41,7 @@ function parsePayload(raw: unknown): RunPayload | null {
   const doc = p.doc as Partial<FormDocument> | undefined
   if (typeof p.formName !== 'string' || typeof p.scriptPath !== 'string') return null
   if (p.script !== undefined && typeof p.script !== 'string') return null
+  if (p.reuse !== undefined && typeof p.reuse !== 'boolean') return null
   if (!doc || typeof doc.width !== 'number' || typeof doc.height !== 'number' || !Array.isArray(doc.children)) return null
   if (typeof p.components !== 'object' || p.components === null) return null
   return p as RunPayload
@@ -69,6 +70,30 @@ export function stopRunFor(ideWindowId: number): void {
   if (!run) return
   run.stopping = true
   endRun(run, 'stopped')
+}
+
+/**
+ * Cria o processo Python de uma execução. Mensagens e término de um processo que já foi SUBSTITUÍDO (na
+ * pré-visualização ao vivo) são ignorados: o fim do antigo não pode encerrar a execução nem o que ele ainda
+ * diz pode aparecer na tela.
+ */
+function attachHost(run: Run, python: PythonCommand, runtime: string, dir: string): PythonHost {
+  const host: PythonHost = new PythonHost(python, runtime, dir, {
+    onMessage: (msg) => {
+      if (run.host === host) onPythonMessage(run, msg)
+    },
+    onExit: (code, stderr) => {
+      if (run.ended || run.host !== host) return
+      const detail = stderr ? `\n${stderr}` : ''
+      ideConsole(run, {
+        level: 'error',
+        text: `O processo Python terminou inesperadamente (código ${code ?? '?'}).${detail}`
+      })
+      endRun(run, 'crashed', code)
+    }
+  })
+  run.host = host
+  return host
 }
 
 function onPythonMessage(run: Run, msg: PyMessage): void {
@@ -113,7 +138,10 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
   const runtime = runtimeScript()
   if (!runtime) return { ok: false, error: 'Arquivos do runtime Python não encontrados (pasta python/).' }
 
-  stopRunFor(ide.id) // só uma execução por vez
+  const existing = byIde.get(ide.id)
+  const reuse = payload.reuse === true
+  if (reuse && (!existing || existing.ended || existing.win.isDestroyed())) return { ok: false, error: NO_PREVIEW_WINDOW }
+  if (!reuse) stopRunFor(ide.id) // só uma execução por vez
 
   let python
   try {
@@ -134,6 +162,24 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
   }
 
   const { doc } = payload
+
+  if (reuse && existing) {
+    // Pré-visualização ao vivo: a janela fica (posição e tamanho dela) e só o Python é trocado.
+    const previous = existing.init.doc
+    const oldHost = existing.host
+    existing.init = { doc, components: payload.components }
+    existing.scriptPath = payload.scriptPath
+    existing.script = script
+    existing.loaded = false
+    attachHost(existing, python, runtime, dir).start()
+    oldHost.stop()
+    if (previous.width !== doc.width || previous.height !== doc.height)
+      existing.win.setContentSize(Math.min(Math.max(Math.round(doc.width), 200), 2400), Math.min(Math.max(Math.round(doc.height), 120), 1600))
+    existing.win.setTitle(doc.title || payload.formName)
+    existing.win.webContents.send('run:reload')
+    return { ok: true, runId: existing.id }
+  }
+
   const win = new BrowserWindow({
     useContentSize: true,
     width: Math.min(Math.max(Math.round(doc.width), 200), 2400),
@@ -166,18 +212,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
     stopping: false,
     host: null as unknown as PythonHost
   }
-  run.host = new PythonHost(python, runtime, dir, {
-    onMessage: (msg) => onPythonMessage(run, msg),
-    onExit: (code, stderr) => {
-      if (run.ended) return
-      const detail = stderr ? `\n${stderr}` : ''
-      ideConsole(run, {
-        level: 'error',
-        text: `O processo Python terminou inesperadamente (código ${code ?? '?'}).${detail}`
-      })
-      endRun(run, 'crashed', code)
-    }
-  })
+  attachHost(run, python, runtime, dir)
 
   byRunWindow.set(run.winContentsId, run)
   byIde.set(ide.id, run)

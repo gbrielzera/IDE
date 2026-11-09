@@ -3,9 +3,11 @@ import type { FormDocument, FormNode } from '@shared/project'
 import { CATALOG_BY_TYPE } from '../components/catalog'
 import { childBoxStyle, childrenLayerStyle } from '../components/layoutStyle'
 import { appearanceStyle, renderContent } from '../components/render'
-import { MIN_SIZE, moveToIndex, reparentNodes, setRects } from '../core/commands'
+import { contentSize, minContentSize } from '../core/bounds'
+import { MIN_SIZE, moveToIndex, reparentNodes, setFormProps, setRects, type Rect } from '../core/commands'
+import { linesOf, snapToGuides, type Lines } from '../core/guides'
 import { activeTab, getProp, layoutOf, type LayoutMode } from '../core/props'
-import { locate, topmost } from '../core/tree'
+import { absPos, insetTop, locate, topmost } from '../core/tree'
 import { useIde } from '../store'
 
 export const DRAG_MIME = 'application/x-vform-type'
@@ -169,6 +171,9 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
   const selection = useIde((s) => s.selection)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const [marquee, setMarquee] = useState<Box | null>(null)
+  /** Linhas de alinhamento mostradas enquanto se arrasta (em coordenadas do formulário). */
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] } | null>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const selected = new Set(selection)
 
   /**
@@ -293,8 +298,36 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
       const n = locate(current, id)?.node
       if (n) origins[id] = { x: n.x, y: n.y }
     }
-    const minX = Math.min(...ids.map((id) => origins[id]?.x ?? 0))
-    const minY = Math.min(...ids.map((id) => origins[id]?.y ?? 0))
+    // Limites: ninguém sai da área do pai (esquerda/topo e direita/base).
+    let loX = -Infinity
+    let hiX = Infinity
+    let loY = -Infinity
+    let hiY = Infinity
+    const sizes: Record<string, Point> = {}
+    for (const id of ids) {
+      const loc = locate(current, id)
+      if (!loc || !origins[id]) continue
+      const area = contentSize(current, loc.parent?.id ?? null)
+      sizes[id] = { x: loc.node.width, y: loc.node.height }
+      loX = Math.max(loX, -origins[id].x)
+      hiX = Math.min(hiX, area.width - loc.node.width - origins[id].x)
+      loY = Math.max(loY, -origins[id].y)
+      hiY = Math.min(hiY, area.height - loc.node.height - origins[id].y)
+    }
+    hiX = Math.max(hiX, loX) // um componente maior que a área não trava o arraste
+    hiY = Math.max(hiY, loY)
+
+    // Alvos das guias: irmãos (que não estão sendo arrastados) e a própria área do pai.
+    const siblings = (parent ? (parent.children ?? []) : current.children).filter(
+      (n) => !ids.includes(n.id) && (parent?.type !== 'Tabs' || (n.tab ?? 0) === (locate(current, primary)?.node.tab ?? 0))
+    )
+    const areaOfParent = contentSize(current, parent?.id ?? null)
+    const targets: Rect[] = [
+      { x: 0, y: 0, width: areaOfParent.width, height: areaOfParent.height },
+      ...siblings.map((n) => ({ x: n.x, y: n.y, width: n.width, height: n.height }))
+    ]
+    const parentAbs = parent ? absPos(current, parent.id) : null
+    const guideOrigin = { x: parentAbs?.x ?? 0, y: (parentAbs?.y ?? 0) + (parent ? insetTop(parent) : 0) }
     const startX = e.clientX
     const startY = e.clientY
     const txn = newTxn('move')
@@ -307,6 +340,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         const dy = ev.clientY - startY
         if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
         moved = true
+        lastNodeDown = null // um toque que virou arrasto não conta como primeiro clique de um duplo clique
 
         if (auto) {
           // Reordena ao vivo enquanto o ponteiro estiver dentro do container.
@@ -319,13 +353,34 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         }
 
         const grid = !ev.altKey
-        const ddx = Math.max(snap(origins[primary].x + dx, grid) - origins[primary].x, -minX)
-        const ddy = Math.max(snap(origins[primary].y + dy, grid) - origins[primary].y, -minY)
+        let ddx = snap(origins[primary].x + dx, grid) - origins[primary].x
+        let ddy = snap(origins[primary].y + dy, grid) - origins[primary].y
+        if (grid) {
+          // Guias inteligentes: a caixa que envolve o que está sendo arrastado gruda nas bordas/centros dos vizinhos.
+          let left = Infinity
+          let top = Infinity
+          let right = -Infinity
+          let bottom = -Infinity
+          for (const id of ids) {
+            if (!sizes[id]) continue
+            left = Math.min(left, origins[id].x + ddx)
+            top = Math.min(top, origins[id].y + ddy)
+            right = Math.max(right, origins[id].x + ddx + sizes[id].x)
+            bottom = Math.max(bottom, origins[id].y + ddy + sizes[id].y)
+          }
+          const hit = snapToGuides(linesOf({ x: left, y: top, width: right - left, height: bottom - top }), targets)
+          ddx += hit.dx
+          ddy += hit.dy
+          setGuides({ v: hit.v.map((x) => guideOrigin.x + x), h: hit.h.map((y) => guideOrigin.y + y) })
+        } else setGuides(null)
+        ddx = Math.min(Math.max(ddx, loX), hiX)
+        ddy = Math.min(Math.max(ddy, loY), hiY)
         const rects: Record<string, Point> = {}
         for (const id of ids) rects[id] = { x: origins[id].x + ddx, y: origins[id].y + ddy }
         useIde.getState().edit((d) => setRects(d, rects), txn)
       },
       (ev) => {
+        setGuides(null)
         if (!moved) return
         const target = containerAt(ev.clientX, ev.clientY, new Set(ids))
         if (auto && target === auto.parent.id) return // só reordenou dentro do mesmo container
@@ -343,6 +398,23 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     const startY = e.clientY
     const txn = newTxn('resize')
 
+    const current = useIde.getState().currentDoc()
+    const loc = current ? locate(current, node.id) : null
+    const parent = loc?.parent ?? null
+    const free = !parent || layoutOf(parent).mode === 'absolute' // em auto-layout o pai manda na posição
+    const area = current ? contentSize(current, parent?.id ?? null) : { width: Infinity, height: Infinity }
+    // Um container não encolhe a ponto de deixar filhos de fora.
+    const content = minContentSize(node.children ?? [], node)
+    const minW = Math.max(MIN_SIZE, content.width)
+    const minH = Math.max(MIN_SIZE, content.height)
+    const siblings = current ? (parent ? (parent.children ?? []) : current.children).filter((n) => n.id !== node.id) : []
+    const targets: Rect[] = [
+      { x: 0, y: 0, width: area.width, height: area.height },
+      ...siblings.map((n) => ({ x: n.x, y: n.y, width: n.width, height: n.height }))
+    ]
+    const parentAbs = parent && current ? absPos(current, parent.id) : null
+    const guideOrigin = { x: parentAbs?.x ?? 0, y: (parentAbs?.y ?? 0) + (parent ? insetTop(parent) : 0) }
+
     track(
       e.pointerId,
       (ev) => {
@@ -350,17 +422,69 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         const dx = ev.clientX - startX
         const dy = ev.clientY - startY
         let { x, y, w, h } = o
-        if (handle.includes('e')) w = Math.max(MIN_SIZE, snap(o.x + o.w + dx, grid) - o.x)
-        if (handle.includes('s')) h = Math.max(MIN_SIZE, snap(o.y + o.h + dy, grid) - o.y)
+        if (handle.includes('e')) w = snap(o.x + o.w + dx, grid) - o.x
+        if (handle.includes('s')) h = snap(o.y + o.h + dy, grid) - o.y
+        if (handle.includes('w')) x = snap(o.x + dx, grid)
+        if (handle.includes('n')) y = snap(o.y + dy, grid)
+
+        // Guias: a borda que está sendo arrastada gruda nas bordas dos vizinhos.
+        if (grid && free) {
+          const moving: Lines = { x: [], y: [] }
+          if (handle.includes('e')) moving.x.push(x + w)
+          if (handle.includes('w')) moving.x.push(x)
+          if (handle.includes('s')) moving.y.push(y + h)
+          if (handle.includes('n')) moving.y.push(y)
+          const hit = snapToGuides(moving, targets)
+          if (handle.includes('e')) w += hit.dx
+          if (handle.includes('w')) x += hit.dx
+          if (handle.includes('s')) h += hit.dy
+          if (handle.includes('n')) y += hit.dy
+          setGuides({ v: hit.v.map((gx) => guideOrigin.x + gx), h: hit.h.map((gy) => guideOrigin.y + gy) })
+        } else setGuides(null)
+
+        // Limites: dentro da área do pai e nunca menor que o mínimo.
         if (handle.includes('w')) {
-          x = Math.max(0, Math.min(snap(o.x + dx, grid), o.x + o.w - MIN_SIZE))
+          x = Math.max(0, Math.min(x, o.x + o.w - minW))
           w = o.x + o.w - x
         }
         if (handle.includes('n')) {
-          y = Math.max(0, Math.min(snap(o.y + dy, grid), o.y + o.h - MIN_SIZE))
+          y = Math.max(0, Math.min(y, o.y + o.h - minH))
           h = o.y + o.h - y
         }
+        if (handle.includes('e')) w = Math.max(minW, free ? Math.min(w, area.width - x) : w)
+        if (handle.includes('s')) h = Math.max(minH, free ? Math.min(h, area.height - y) : h)
         useIde.getState().edit((d) => setRects(d, { [node.id]: { x, y, width: w, height: h } }), txn)
+      },
+      () => setGuides(null)
+    )
+  }
+
+  /** Arrasta a borda direita, a de baixo ou o canto do formulário para mudar o tamanho dele. */
+  function onFormGripDown(e: React.PointerEvent, grip: 'e' | 's' | 'se'): void {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const frame = frameRef.current
+    if (!frame) return
+    const startW = doc.width
+    const startH = doc.height
+    const startX = e.clientX
+    const startY = e.clientY
+    const txn = newTxn('formsize')
+    // O formulário fica centralizado na área de trabalho: ao crescer, as duas bordas se afastam do centro e
+    // a borda arrastada acompanha o ponteiro com o DOBRO do deslocamento. Se ele é mais largo que a área
+    // (encostado à esquerda), só a borda direita anda.
+    const scroller = frame.parentElement?.parentElement ?? frame.parentElement
+    const centered = scroller ? frame.getBoundingClientRect().left - scroller.getBoundingClientRect().left > 36 : true
+    const factor = centered ? 2 : 1
+
+    track(
+      e.pointerId,
+      (ev) => {
+        const grid = !ev.altKey
+        const width = grip.includes('e') ? snap(startW + factor * (ev.clientX - startX), grid) : startW
+        const height = grip.includes('s') ? snap(startH + (ev.clientY - startY), grid) : startH
+        useIde.getState().edit((d) => setFormProps(d, { width, height }), txn)
       },
       () => {}
     )
@@ -388,7 +512,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         const x2 = Math.max(startX, ev.clientX)
         const y2 = Math.max(startY, ev.clientY)
         if (x2 - x1 < DRAG_THRESHOLD && y2 - y1 < DRAG_THRESHOLD) return
-        setMarquee({ x: x1 - origin.left, y: y1 - origin.top, w: x2 - x1, h: y2 - y1 })
+        setMarquee({ x: x1 - origin.left - surface.clientLeft, y: y1 - origin.top - surface.clientTop, w: x2 - x1, h: y2 - y1 })
         const hits: string[] = []
         for (const el of surface.querySelectorAll<HTMLElement>(':scope > .node')) {
           const r = el.getBoundingClientRect()
@@ -421,8 +545,30 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     useIde.getState().addComponent(type, parentId, snap(e.clientX - o.x, true), snap(e.clientY - o.y, true))
   }
 
+  const showRulers = useIde((st) => st.settings.rulers)
+  const ticks = (length: number): number[] => Array.from({ length: Math.floor(length / 100) + 1 }, (_, i) => i * 100)
+
   return (
-    <div className="form-frame" style={{ width: doc.width }}>
+    <div className={`design-wrap${showRulers ? ' with-rulers' : ''}`}>
+      {showRulers && (
+        <>
+          <div className="ruler ruler-h" style={{ width: doc.width }} aria-hidden="true" data-testid="ruler-h">
+            {ticks(doc.width).map((n) => (
+              <span key={n} style={{ left: n }}>
+                {n}
+              </span>
+            ))}
+          </div>
+          <div className="ruler ruler-v" style={{ height: doc.height }} aria-hidden="true" data-testid="ruler-v">
+            {ticks(doc.height).map((n) => (
+              <span key={n} style={{ top: n }}>
+                {n}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    <div className="form-frame" ref={frameRef}>
       <div className="form-titlebar">
         <span className="form-title-text">{doc.title}</span>
         <span className="wincaps" aria-hidden="true">
@@ -435,7 +581,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         ref={surfaceRef}
         className="form-surface"
         data-testid="surface"
-        style={{ height: doc.height }}
+        style={{ width: doc.width, height: doc.height }}
         onPointerDown={onSurfaceDown}
         onDragStart={(e) => e.preventDefault()}
         onDoubleClick={(e) => e.target === e.currentTarget && useIde.getState().openHandler(null)}
@@ -454,10 +600,16 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
             onHandleDown={onHandleDown}
           />
         ))}
+        {guides?.v.map((x) => <div key={`v${x}`} className="guide guide-v" style={{ left: x }} />)}
+        {guides?.h.map((y) => <div key={`h${y}`} className="guide guide-h" style={{ top: y }} />)}
         {marquee && (
           <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
         )}
       </div>
+      <div className="form-grip form-grip-e" data-testid="grip-e" title="Arraste para mudar a largura do formulário" onPointerDown={(e) => onFormGripDown(e, 'e')} />
+      <div className="form-grip form-grip-s" data-testid="grip-s" title="Arraste para mudar a altura do formulário" onPointerDown={(e) => onFormGripDown(e, 's')} />
+      <div className="form-grip form-grip-se" data-testid="grip-se" title="Arraste para mudar o tamanho do formulário" onPointerDown={(e) => onFormGripDown(e, 'se')} />
+    </div>
     </div>
   )
 }

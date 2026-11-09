@@ -28,7 +28,7 @@ export function layoutOf(node: FormNode): LayoutInfo {
   }
 }
 
-export function isAutoLayout(node: FormNode | null | undefined): node is FormNode {
+export function isAutoLayout(node: FormNode | null | undefined): boolean {
   return !!node && layoutOf(node).mode !== 'absolute'
 }
 

@@ -13,6 +13,11 @@ export interface RunPayload {
   scriptPath: string
   /** Texto do script alterado no editor e ainda não salvo; se ausente, o main lê o arquivo do disco. */
   script?: string
+  /**
+   * Pré-visualização ao vivo: atualiza a janela de execução que já está aberta (reiniciando só o Python),
+   * em vez de abrir outra. Se não houver janela aberta, não faz nada.
+   */
+  reuse?: boolean
   doc: FormDocument
   components: Record<string, RunComponent>
 }
@@ -23,6 +28,9 @@ export interface RunInit {
 }
 
 export type RunStartResult = { ok: true; runId: number } | { ok: false; error: string }
+
+/** Erro devolvido por uma atualização ao vivo quando não há janela aberta (não é uma falha a mostrar). */
+export const NO_PREVIEW_WINDOW = 'sem-janela'
 
 export interface RunConsoleMessage {
   level: 'info' | 'warn' | 'error'
@@ -63,4 +71,6 @@ export interface RunApi {
   ready(): void
   send(msg: RunToPython): void
   onMessage(cb: (msg: RunFromPython) => void): () => void
+  /** A IDE atualizou o formulário/script: busque os dados de novo (`init`) e avise com `ready`. */
+  onReload(cb: () => void): () => void
 }

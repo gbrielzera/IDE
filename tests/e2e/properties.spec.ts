@@ -146,10 +146,10 @@ test('formulário: título e tamanho', async () => {
 
   await s.setField('form-width', '800')
   await s.setField('form-height', '520')
-  expect(await s.page.locator('.form-frame').evaluate((e) => (e as HTMLElement).offsetWidth)).toBe(800)
-  expect(await s.surface.evaluate((e) => (e as HTMLElement).offsetHeight)).toBe(520)
+  // A área útil (onde ficam os componentes) tem exatamente o tamanho informado, igual à janela em execução.
+  expect(await s.surface.evaluate((e) => [e.clientWidth, e.clientHeight])).toEqual([800, 520])
   await s.setField('form-width', '5') // mínimo 100
-  expect(await s.page.locator('.form-frame').evaluate((e) => (e as HTMLElement).offsetWidth)).toBe(100)
+  expect(await s.surface.evaluate((e) => e.clientWidth)).toBe(100)
 })
 
 test.describe('auto-layout do Panel', () => {

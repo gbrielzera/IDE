@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { FormDocument, FormNode } from '@shared/project'
 import { allPropDefs } from '../components/catalog'
-import { setRects } from '../core/commands'
 import { getProp } from '../core/props'
 import { locate } from '../core/tree'
 import { useActiveFormDoc, useIde } from '../store'
@@ -21,11 +20,11 @@ function Section({ title }: { title: string }): React.JSX.Element {
 }
 
 function ComponentProps({ node }: { node: FormNode }): React.JSX.Element {
-  const { renameComponent, setProp, edit } = useIde.getState()
+  const { renameComponent, setProp, setNodeRect } = useIde.getState()
   const [idError, setIdError] = useState<string | null>(null)
   const defs = allPropDefs(node.type)
   const rect = (key: 'x' | 'y' | 'width' | 'height', value: number): void =>
-    edit((d) => setRects(d, { [node.id]: { [key]: value } }))
+    setNodeRect(node.id, { [key]: value })
 
   return (
     <dl className="props">
