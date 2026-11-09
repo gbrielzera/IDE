@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { ErrorBoundary } from '../ErrorBoundary'
 import { useActiveFormDoc, useIde } from '../store'
 import { DesignSurface } from './DesignSurface'
 
@@ -42,9 +43,23 @@ export function CanvasArea(): React.JSX.Element {
         ])}
       </nav>
       {view === 'code' && active ? (
-        <Suspense fallback={<div className="canvas-scroll muted">Carregando o editor...</div>}>
-          <CodeEditor key={active} formName={active} />
-        </Suspense>
+        <ErrorBoundary
+          onError={(e) => useIde.getState().log('error', `Não foi possível abrir o editor de código: ${e.message}`)}
+          fallback={(e) => (
+            <div className="canvas-scroll code-error" role="alert" data-testid="code-error">
+              <p>
+                <strong>Não foi possível abrir o editor de código.</strong>
+              </p>
+              <p className="muted">{e.message}</p>
+              <p className="muted">O script continua no arquivo {forms.find((f) => f.name === active)?.script}; o formulário não foi afetado.</p>
+              <button onClick={() => openTab(active, 'design')}>Voltar ao formulário</button>
+            </div>
+          )}
+        >
+          <Suspense fallback={<div className="canvas-scroll muted">Carregando o editor...</div>}>
+            <CodeEditor key={active} formName={active} />
+          </Suspense>
+        </ErrorBoundary>
       ) : (
         <div className="canvas-scroll">
           {doc ? (

@@ -1114,3 +1114,25 @@ button.link {
   background: var(--sel-bg);
   color: var(--sel-text);
 }
+
+/* ---------- Erros inesperados ---------- */
+.code-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 24px;
+  background: var(--paper);
+}
+.fatal-error {
+  max-width: 560px;
+  margin: 12vh auto;
+  padding: 0 20px;
+}
+.fatal-error h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+body:has(.fatal-error) {
+  overflow: auto;
+}

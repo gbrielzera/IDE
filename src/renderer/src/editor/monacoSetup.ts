@@ -1,15 +1,20 @@
 // Configuração única do Monaco: workers, temas, autocompletar da API do VForm e marcadores.
 import * as monaco from '@monaco/editor/editor.api.js'
 import '@monaco/languages/definitions/python/register.js'
-import EditorWorker from '@monaco/editor/editor.worker.js?worker'
 import './monacoFeatures'
 import { lintScript } from '../core/lint'
 import { completionsFor, type MemberKind } from '../core/pyapi'
 import { useIde, type RunError } from '../store'
 
 // O Monaco pede um worker por idioma; só o do editor é necessário (Python usa só realce de sintaxe).
+// O worker é criado por URL relativa (`new Worker(new URL(...))`), que o Vite entende tanto no dev quanto no
+// build. A forma `import X from '...?worker'` NÃO serve: no `npm run dev` o otimizador de dependências do Vite
+// a pré-empacota sem o `export default`, o carregamento do editor falha e a tela fica em branco.
 ;(self as unknown as { MonacoEnvironment: monaco.Environment }).MonacoEnvironment = {
-  getWorker: () => new EditorWorker()
+  getWorker: () =>
+    new Worker(new URL('../../../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url), {
+      type: 'module'
+    })
 }
 
 monaco.editor.defineTheme('vform-light', {

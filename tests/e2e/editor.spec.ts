@@ -244,3 +244,31 @@ test('o editor acompanha o tema escuro', async () => {
   await s.page.getByRole('menuitem', { name: /tema/ }).click()
   await expect(s.page.locator('.monaco-editor.vs-dark')).toBeVisible()
 })
+
+test('se o editor não carregar, a IDE mostra o erro e continua viva (nunca uma tela em branco)', async () => {
+  await s.start()
+  await s.dropFrom('Button', s.surface, { x: 102, y: 62 })
+  await s.setField('id', 'btnOk')
+
+  // Simula uma falha ao carregar o pedaço do Monaco (foi assim que o `npm run dev` ficou em branco).
+  await s.app.evaluate(({ session }) => {
+    session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*CodeEditor*', 'file:///*CodeEditor*'] }, (_details, callback) =>
+      callback({ cancel: true })
+    )
+  })
+  await s.node('btnOk').dblclick()
+
+  const erro = s.page.getByTestId('code-error')
+  await expect(erro).toBeVisible()
+  await expect(erro).toContainText('Não foi possível abrir o editor de código')
+  await expect(erro).toContainText('Main.py') // diz onde o script está
+  await expect(s.page.locator('.console-line.error', { hasText: 'Não foi possível abrir o editor' })).toBeVisible()
+  // O resto da IDE segue funcionando: menus, abas e o próprio formulário.
+  await expect(s.page.getByTestId('tab-design-Main')).toBeVisible()
+  await expect(s.page.getByRole('button', { name: 'Arquivo' })).toBeVisible()
+
+  await s.page.getByRole('button', { name: 'Voltar ao formulário' }).click()
+  await expect(s.surface).toBeVisible()
+  await expect(s.node('btnOk')).toBeVisible()
+  await expect(s.page.getByTestId('prop-id')).toBeVisible()
+})
