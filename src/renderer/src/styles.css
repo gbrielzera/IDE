@@ -1095,3 +1095,22 @@ button.link {
 .r-unknown {
   color: #b3261e;
 }
+
+/* ---------- Editor de código (Monaco) ---------- */
+.code-host {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid;
+  border-color: var(--shadow) var(--hl) var(--hl) var(--shadow);
+  box-shadow: inset 1px 1px 0 var(--dkshadow);
+}
+.tab-dirty {
+  color: var(--accent-dark);
+}
+.console-line.clickable {
+  cursor: pointer;
+}
+.console-line.clickable:hover {
+  background: var(--sel-bg);
+  color: var(--sel-text);
+}

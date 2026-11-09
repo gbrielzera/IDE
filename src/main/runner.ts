@@ -40,6 +40,7 @@ function parsePayload(raw: unknown): RunPayload | null {
   const p = raw as Partial<RunPayload>
   const doc = p.doc as Partial<FormDocument> | undefined
   if (typeof p.formName !== 'string' || typeof p.scriptPath !== 'string') return null
+  if (p.script !== undefined && typeof p.script !== 'string') return null
   if (!doc || typeof doc.width !== 'number' || typeof doc.height !== 'number' || !Array.isArray(doc.children)) return null
   if (typeof p.components !== 'object' || p.components === null) return null
   return p as RunPayload
@@ -125,7 +126,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
   let scriptPath: string
   try {
     scriptPath = insideProject(dir, payload.scriptPath)
-    script = await fs.readFile(scriptPath, 'utf8')
+    script = typeof payload.script === 'string' ? payload.script : await fs.readFile(scriptPath, 'utf8')
   } catch (err) {
     if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== 'ENOENT')
       return { ok: false, error: `Não foi possível ler o script: ${err instanceof Error ? err.message : String(err)}` }
@@ -189,7 +190,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
     ideConsole(run, { level: 'warn', text: `Script ${payload.scriptPath} não encontrado: executando só o layout.` })
   ideConsole(run, {
     level: 'info',
-    text: `Executando "${payload.formName}" (layout atual + ${basename(payload.scriptPath)} do disco, Python ${python.version})`
+    text: `Executando "${payload.formName}" (layout atual + ${basename(payload.scriptPath)} ${typeof payload.script === 'string' ? 'do editor, ainda não salvo' : 'do disco'}, Python ${python.version})`
   })
 
   run.host.start()

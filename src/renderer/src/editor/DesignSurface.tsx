@@ -28,6 +28,15 @@ interface Point {
 }
 
 let txnCounter = 0
+
+/**
+ * Duplo clique num componente (abre o handler no código). Não dá para usar o evento `dblclick`: o canvas
+ * captura o ponteiro ao apertar o botão (para o arraste não ser cancelado) e o Chromium então entrega o
+ * `dblclick` ao canvas, não ao componente. Por isso o duplo clique é reconhecido aqui, na segunda pressão.
+ */
+const DOUBLE_CLICK_MS = 450
+const DOUBLE_CLICK_SLOP = 6
+let lastNodeDown: { id: string; time: number; x: number; y: number } | null = null
 const newTxn = (kind: string): string => `${kind}-${++txnCounter}`
 
 /** Encaixa na grade; com Alt apertado só arredonda para pixel inteiro. */
@@ -240,6 +249,22 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
       return
     }
 
+    if (!isAdditive(e)) {
+      const prev = lastNodeDown
+      lastNodeDown = { id: node.id, time: e.timeStamp, x: e.clientX, y: e.clientY }
+      if (
+        prev &&
+        prev.id === node.id &&
+        e.timeStamp - prev.time < DOUBLE_CLICK_MS &&
+        Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_CLICK_SLOP
+      ) {
+        lastNodeDown = null
+        ide.select([node.id])
+        ide.openHandler(node.id)
+        return
+      }
+    }
+
     let sel = ide.selection
     if (isAdditive(e)) {
       sel = sel.includes(node.id) ? sel.filter((id) => id !== node.id) : [...sel, node.id]
@@ -413,6 +438,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         style={{ height: doc.height }}
         onPointerDown={onSurfaceDown}
         onDragStart={(e) => e.preventDefault()}
+        onDoubleClick={(e) => e.target === e.currentTarget && useIde.getState().openHandler(null)}
         onDragOver={onPaletteDragOver}
         onDrop={onDrop}
       >

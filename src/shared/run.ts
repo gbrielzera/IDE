@@ -9,8 +9,10 @@ export interface RunComponent {
 
 export interface RunPayload {
   formName: string
-  /** Caminho do script, relativo à pasta do projeto (o main lê do disco). */
+  /** Caminho do script, relativo à pasta do projeto. */
   scriptPath: string
+  /** Texto do script alterado no editor e ainda não salvo; se ausente, o main lê o arquivo do disco. */
+  script?: string
   doc: FormDocument
   components: Record<string, RunComponent>
 }

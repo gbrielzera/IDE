@@ -12,6 +12,7 @@ import {
   type ProjectResult,
   type SaveResult
 } from '@shared/project'
+import { writeFileSafely } from './safeWrite'
 
 /** Pasta do projeto aberto em cada janela. O renderer nunca escolhe onde gravar. */
 const openDirs = new Map<number, string>()
@@ -154,12 +155,7 @@ async function saveProject(e: IpcMainInvokeEvent, files: unknown): Promise<SaveR
       if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
       writes.push([insideProject(dir, rel), content])
     }
-    for (const [full, content] of writes) {
-      // Grava num temporário e renomeia, para não corromper o arquivo se algo falhar no meio.
-      const tmp = `${full}.tmp`
-      await fs.writeFile(tmp, content, 'utf8')
-      await fs.rename(tmp, full)
-    }
+    for (const [full, content] of writes) await writeFileSafely(full, content)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: errorMessage(err) }

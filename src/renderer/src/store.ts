@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { FormDocument, LoadedProject } from '@shared/project'
+import { PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
 import {
   addNode,
   createNode,
@@ -25,7 +25,8 @@ import { idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
 import { layoutOf } from './core/props'
 import { buildRunComponents } from './core/runstate'
-import type { RunEnded } from '@shared/run'
+import { ensureHandler, eventForDoubleClick } from './core/script'
+import type { RunConsoleMessage, RunEnded } from '@shared/run'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -34,6 +35,16 @@ export interface ConsoleLine {
   time: string
   level: LogLevel
   text: string
+  /** Erros de execução do script: linha e arquivo, para pular até o código ao clicar. */
+  line?: number
+  file?: string
+}
+
+export type View = 'design' | 'code'
+
+export interface RunError {
+  line: number
+  message: string
 }
 
 interface IdeState {
@@ -49,12 +60,29 @@ interface IdeState {
   /** Há uma janela de execução aberta (e qual: avisos de execuções antigas são ignorados). */
   running: boolean
   runId: number | null
+  /** Texto do script de cada formulário (a fonte da verdade enquanto o projeto está aberto). */
+  scripts: Record<string, string>
+  /** Scripts alterados na IDE e ainda não salvos: só esses são gravados (os outros podem ter sido editados fora). */
+  scriptDirty: Record<string, boolean>
+  /**
+   * Contador por formulário, incrementado quando o texto do script muda POR FORA do editor (handler criado
+   * pelo duplo clique, projeto reaberto). O editor só copia o texto da store para o Monaco quando ele muda:
+   * copiar a cada atualização devolveria à tela um eco atrasado do que foi digitado e apagaria teclas.
+   */
+  scriptSync: Record<string, number>
+  /** O que a área central mostra: o formulário (design) ou o script (code). */
+  activeView: View
+  /** Pedido para o editor levar o cursor a uma linha (o `nonce` distingue pedidos repetidos). */
+  reveal: { form: string; line: number; nonce: number } | null
+  /** Erros da última execução, marcados na linha do script. */
+  runErrors: Record<string, RunError[]>
 
   newProject(): Promise<void>
   openProject(): Promise<void>
   saveProject(): Promise<void>
   setActiveForm(name: string): void
-  log(level: LogLevel, text: string): void
+  openTab(form: string, view: View): void
+  log(level: LogLevel, text: string, meta?: { line?: number; file?: string }): void
   clearConsole(): void
 
   currentDoc(): FormDocument | null
@@ -72,12 +100,35 @@ interface IdeState {
   run(): Promise<void>
   stop(): Promise<void>
   runEnded(ended: RunEnded): void
+  /** Mensagem do console vinda do Python: vai para o console e, se for erro com linha, marca o script. */
+  runConsole(msg: RunConsoleMessage): void
+  /** `origin` 'editor' = digitado no Monaco (ele já tem o texto); 'external' = mudou por fora e o Monaco deve copiar. */
+  setScript(form: string, text: string, origin?: 'editor' | 'external'): void
+  /** Duplo clique: cria (ou localiza) o handler do evento padrão do componente e abre o código nele. */
+  openHandler(componentId: string | null): void
+  /** Abre o script que tem esse nome de arquivo na linha dada (clique no erro do console). */
+  goToScript(file: string, line: number): void
+  clearReveal(): void
   deleteSelection(): void
   duplicateSelection(): void
   nudgeSelection(dx: number, dy: number): void
 }
 
 let nextLineId = 1
+let nextRevealNonce = 1
+
+const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path
+
+/** A última linha não vazia (a mensagem da exceção, em um traceback). */
+function lastLine(text: string): string {
+  return (
+    text
+      .split('\n')
+      .filter((l) => l.trim() !== '')
+      .pop()
+      ?.trim() ?? text
+  )
+}
 
 function now(): string {
   return new Date().toLocaleTimeString('pt-BR', { hour12: false })
@@ -104,7 +155,23 @@ export const useIde = create<IdeState>((set, get) => {
             problems.push(`Formulário ${form.name}: ${err instanceof Error ? err.message : String(err)}`)
           }
         }
-        set({ project, tracked, selection: [], activeForm: project.manifest.forms[0]?.name ?? null, dirty: false })
+        const scripts: Record<string, string> = {}
+        for (const form of project.manifest.forms) scripts[form.name] = project.files[form.script] ?? ''
+        set({
+          project,
+          tracked,
+          scripts,
+          scriptDirty: {},
+          scriptSync: Object.fromEntries(
+            project.manifest.forms.map((f) => [f.name, (get().scriptSync[f.name] ?? 0) + 1])
+          ),
+          runErrors: {},
+          reveal: null,
+          activeView: 'design',
+          selection: [],
+          activeForm: project.manifest.forms[0]?.name ?? null,
+          dirty: false
+        })
         document.title = `${project.manifest.name} — VForm IDE`
         get().log('info', `Projeto "${project.manifest.name}" ${kind === 'new' ? 'criado' : 'aberto'} em ${project.dir}`)
         problems.forEach((p) => get().log('error', p))
@@ -131,23 +198,32 @@ export const useIde = create<IdeState>((set, get) => {
     selection: [],
     running: false,
     runId: null,
+    scripts: {},
+    scriptDirty: {},
+    scriptSync: {},
+    activeView: 'design',
+    reveal: null,
+    runErrors: {},
 
     newProject: () => load('new'),
     openProject: () => load('open'),
 
     async saveProject() {
-      const { project, tracked, busy } = get()
+      const { project, tracked, scripts, scriptDirty, busy } = get()
       if (!project || busy) return
       set({ busy: true })
       try {
-        const files = { ...project.files }
+        // Grava os layouts e só os scripts alterados aqui: um script que ninguém mexeu na IDE pode ter
+        // sido editado em outro programa, e regravar a cópia antiga o desfaria.
+        const files: Record<string, string> = { [PROJECT_FILE]: project.files[PROJECT_FILE] }
         for (const form of project.manifest.forms) {
           const t = tracked[form.name]
           if (t) files[form.layout] = serializeForm(t.doc)
+          if (scriptDirty[form.name]) files[form.script] = scripts[form.name] ?? ''
         }
         const res = await window.vform.saveProject(files)
         if (res.ok) {
-          set({ project: { ...project, files }, dirty: false })
+          set({ project: { ...project, files: { ...project.files, ...files } }, scriptDirty: {}, dirty: false })
           get().log('info', 'Projeto salvo.')
         } else {
           get().log('error', `Falha ao salvar: ${res.error}`)
@@ -159,8 +235,16 @@ export const useIde = create<IdeState>((set, get) => {
 
     setActiveForm: (name) => set({ activeForm: name, selection: [] }),
 
-    log: (level, text) =>
-      set((s) => ({ console: [...s.console.slice(-499), { id: nextLineId++, time: now(), level, text }] })),
+    openTab: (form, view) =>
+      set((s) => ({ activeForm: form, activeView: view, selection: form === s.activeForm ? s.selection : [] })),
+
+    log: (level, text, meta) =>
+      set((s) => ({
+        console: [
+          ...s.console.slice(-499),
+          { id: nextLineId++, time: now(), level, text, line: meta?.line, file: meta?.file }
+        ]
+      })),
 
     clearConsole: () => set({ console: [] }),
 
@@ -236,9 +320,12 @@ export const useIde = create<IdeState>((set, get) => {
         get().log('error', 'O formulário ativo não pôde ser lido; corrija o arquivo para executar.')
         return
       }
+      set({ runErrors: {} })
       const res = await window.vform.run.start({
         formName: form.name,
         scriptPath: form.script,
+        // Texto alterado no editor e ainda não salvo vale; senão o main lê o arquivo do disco (edição externa).
+        script: get().scriptDirty[form.name] ? get().scripts[form.name] : undefined,
         doc: t.doc,
         components: buildRunComponents(t.doc)
       })
@@ -255,6 +342,55 @@ export const useIde = create<IdeState>((set, get) => {
       set({ running: false, runId: null })
       if (ended.reason !== 'crashed') get().log('info', 'Execução encerrada.')
     },
+
+    runConsole(msg) {
+      get().log(msg.level, msg.text, { line: msg.line, file: msg.file })
+      const { project } = get()
+      if (msg.level !== 'error' || msg.line === undefined || !msg.file || !project) return
+      const form = project.manifest.forms.find((f) => baseName(f.script) === msg.file)?.name
+      if (!form) return
+      const entry = { line: msg.line, message: lastLine(msg.text) }
+      set((s) => ({ runErrors: { ...s.runErrors, [form]: [...(s.runErrors[form] ?? []), entry] } }))
+    },
+
+    setScript(form, text, origin = 'editor') {
+      if (get().scripts[form] === text) return
+      set((s) => ({
+        scripts: { ...s.scripts, [form]: text },
+        scriptDirty: { ...s.scriptDirty, [form]: true },
+        scriptSync: origin === 'external' ? { ...s.scriptSync, [form]: (s.scriptSync[form] ?? 0) + 1 } : s.scriptSync,
+        dirty: true
+      }))
+    },
+
+    openHandler(componentId) {
+      const { activeForm, scripts } = get()
+      const doc = get().currentDoc()
+      if (!activeForm || !doc) return
+      let event = 'click'
+      if (componentId !== null) {
+        const node = locate(doc, componentId)?.node
+        if (!node) return
+        event = eventForDoubleClick(node.type)
+      }
+      const res = ensureHandler(scripts[activeForm] ?? '', componentId, event)
+      if (res.created) get().setScript(activeForm, res.script, 'external')
+      set({ activeView: 'code', reveal: { form: activeForm, line: res.line, nonce: nextRevealNonce++ } })
+    },
+
+    goToScript(file, line) {
+      const { project, activeForm } = get()
+      const form = project?.manifest.forms.find((f) => baseName(f.script) === file)?.name
+      if (!form) return
+      set({
+        activeForm: form,
+        activeView: 'code',
+        selection: form === activeForm ? get().selection : [],
+        reveal: { form, line, nonce: nextRevealNonce++ }
+      })
+    },
+
+    clearReveal: () => set({ reveal: null }),
 
     deleteSelection() {
       const ids = selectionRoots()
@@ -303,3 +439,4 @@ export const useIde = create<IdeState>((set, get) => {
 export function useActiveFormDoc(): FormDocument | null {
   return useIde((s) => (s.activeForm ? (s.tracked[s.activeForm]?.doc ?? null) : null))
 }
+

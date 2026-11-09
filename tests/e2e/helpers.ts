@@ -132,6 +132,52 @@ export class Studio {
       .toBe(true)
   }
 
+  /** Abre a aba de código do formulário e espera o Monaco aparecer. */
+  async openCode(form = 'Main'): Promise<void> {
+    await this.page.getByTestId(`tab-code-${form}`).click()
+    await this.page.locator('.monaco-editor .view-line').first().waitFor() // linhas já desenhadas
+  }
+
+  /**
+   * Clica no editor e espera ele ficar com o foco. O Monaco é carregado sob demanda: teclas digitadas antes
+   * disso não chegam nele, então todo teste que digita passa por aqui (ou por `waitEditorFocus`).
+   */
+  async focusEditor(): Promise<void> {
+    await this.page.locator('.monaco-editor .view-lines').first().click()
+    await this.waitEditorFocus()
+  }
+
+  /** Espera o foco no editor (o duplo clique já o foca sozinho ao levar o cursor ao handler). */
+  async waitEditorFocus(): Promise<void> {
+    await this.page.locator('.monaco-editor.focused').first().waitFor()
+  }
+
+  /** Texto visível do editor de código (o Monaco só desenha as linhas na tela; scripts curtos cabem). */
+  async editorText(): Promise<string> {
+    const text = await this.page.locator('.monaco-editor .view-lines').first().innerText()
+    return text.replace(/ /g, ' ')
+  }
+
+  /** Rótulos (ID, tipo) das sugestões que o Monaco está mostrando agora. */
+  suggestionLabels(): Promise<string[]> {
+    return this.page
+      .locator('.suggest-widget .monaco-list-row')
+      .evaluateAll((rows) => rows.map((r) => r.getAttribute('aria-label') ?? ''))
+  }
+
+  /**
+   * Insere texto de uma vez, como uma colagem. Para trechos de várias linhas: digitar `Enter` com a lista de
+   * sugestões aberta aceita a sugestão em vez de quebrar a linha, e o Monaco também fecha aspas/parênteses.
+   */
+  async pasteInEditor(text: string): Promise<void> {
+    await this.page.keyboard.insertText(text)
+  }
+
+  /** Digita no editor como uma pessoa (com as sugestões e os fechamentos automáticos do Monaco). */
+  async typeInEditor(text: string): Promise<void> {
+    await this.page.keyboard.type(text, { delay: 15 })
+  }
+
   /** Executa o formulário (F5) e devolve a janela de execução, já com o formulário renderizado. */
   async runForm(): Promise<Page> {
     const [runPage] = await Promise.all([this.app.waitForEvent('window'), this.page.keyboard.press('F5')])

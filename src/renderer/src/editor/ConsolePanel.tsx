@@ -19,12 +19,20 @@ export function ConsolePanel(): React.JSX.Element {
         </button>
       </h2>
       <div className="pane-body console">
-        {lines.map((l) => (
-          <div key={l.id} className={`console-line ${l.level}`}>
-            <span className="console-time">{l.time}</span>
-            {l.text}
-          </div>
-        ))}
+        {lines.map((l) => {
+          const link = l.line !== undefined && l.file !== undefined
+          return (
+            <div
+              key={l.id}
+              className={`console-line ${l.level}${link ? ' clickable' : ''}`}
+              title={link ? `Ir para a linha ${l.line} de ${l.file}` : undefined}
+              onClick={link ? () => useIde.getState().goToScript(l.file!, l.line!) : undefined}
+            >
+              <span className="console-time">{l.time}</span>
+              {l.text}
+            </div>
+          )
+        })}
         <div ref={endRef} />
       </div>
     </section>

@@ -14,6 +14,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
+        // O Monaco restringe os caminhos de importação (exports); o alias dá acesso direto aos módulos ESM.
+        '@monaco': resolve('node_modules/monaco-editor/esm/vs'),
         '@shared': resolve('src/shared')
       }
     },

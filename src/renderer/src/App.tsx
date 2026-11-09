@@ -75,7 +75,7 @@ function useShortcuts(): void {
 function useRunEvents(): void {
   useEffect(() => {
     const api = window.vform.run
-    const offConsole = api.onConsole((m) => useIde.getState().log(m.level, m.text))
+    const offConsole = api.onConsole((m) => useIde.getState().runConsole(m))
     const offEnded = api.onEnded((e) => useIde.getState().runEnded(e))
     return () => {
       offConsole()
