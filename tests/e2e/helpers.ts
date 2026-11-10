@@ -37,7 +37,7 @@ export class Studio {
   profile = ''
   surface!: Locator
 
-  async start(env: Record<string, string> = {}, existingProfile?: string): Promise<void> {
+  async start(env: Record<string, string> = {}, existingProfile?: string, blockEditorChunk = false): Promise<void> {
     this.dir = await mkdtemp(join(tmpdir(), 'vform-e2e-'))
     const launched = await launchApp(env, existingProfile)
     this.profile = launched.profile
@@ -45,6 +45,16 @@ export class Studio {
     this.cleanupApp = launched.cleanup
     this.page = await this.app.firstWindow()
     await this.page.waitForSelector('.welcome')
+    if (blockEditorChunk) {
+      // Simula uma falha ao carregar o pedaço do Monaco (foi assim que o `npm run dev` ficou em branco).
+      await this.app.evaluate(({ session }) => {
+        session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*CodeEditor*', 'file:///*CodeEditor*'] }, (_d, cb) => cb({ cancel: true }))
+      })
+      await this.page.reload() // recomeça com o bloqueio já valendo (o carregamento antecipado também falha)
+      await this.page.waitForSelector('.welcome')
+    }
+    // A carga do editor de código em segundo plano ocupa a página por um instante; arrastos só depois dela.
+    await this.page.waitForSelector('html[data-editor-warm]', { state: 'attached', timeout: 30_000 })
     await this.stubDialog(this.dir)
     await this.page.getByRole('button', { name: 'Novo projeto' }).click()
     this.surface = this.page.getByTestId('surface')

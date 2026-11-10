@@ -3,8 +3,24 @@ import { ErrorBoundary } from '../ErrorBoundary'
 import { useActiveFormDoc, useIde } from '../store'
 import { DesignSurface } from './DesignSurface'
 
-// O Monaco é pesado: só é carregado na primeira vez que se abre uma aba de código.
-const CodeEditor = lazy(() => import('./CodeEditor'))
+// O Monaco é pesado (7 MB no app compilado; mais de mil módulos soltos no `npm run dev`, ~10 s). Fica fora do
+// pacote inicial e é carregado em SEGUNDO PLANO logo depois de a IDE abrir (veja `preloadCodeEditor`), para já
+// estar pronto no primeiro duplo clique. Se o clique vier antes de terminar, a aba mostra "Carregando...".
+let editorModule: Promise<typeof import('./CodeEditor')> | null = null
+
+export function preloadCodeEditor(): Promise<unknown> {
+  editorModule ??= import('./CodeEditor')
+  return editorModule
+}
+
+/** Carrega o editor e o aquece (veja `warmUpMonaco`). Só o carregamento é compartilhado com a aba; o aquecimento roda uma vez. */
+let warmed: Promise<void> | null = null
+export function preloadAndWarmCodeEditor(): Promise<void> {
+  warmed ??= preloadCodeEditor().then((m) => (m as typeof import('./CodeEditor')).warmUpMonaco())
+  return warmed
+}
+
+const CodeEditor = lazy(() => preloadCodeEditor() as Promise<typeof import('./CodeEditor')>)
 
 export function CanvasArea(): React.JSX.Element {
   const forms = useIde((s) => s.project?.manifest.forms ?? [])

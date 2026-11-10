@@ -39,6 +39,10 @@ let txnCounter = 0
 const DOUBLE_CLICK_MS = 450
 const DOUBLE_CLICK_SLOP = 6
 let lastNodeDown: { id: string; time: number; x: number; y: number } | null = null
+let lastTitleDown: { time: number; x: number; y: number } | null = null
+
+/** Preenchimento da área de trabalho (CSS `.canvas-scroll`). */
+const SCROLLER_PADDING = 28
 const newTxn = (kind: string): string => `${kind}-${++txnCounter}`
 
 /** Encaixa na grade; com Alt apertado só arredonda para pixel inteiro. */
@@ -174,6 +178,8 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
   /** Linhas de alinhamento mostradas enquanto se arrasta (em coordenadas do formulário). */
   const [guides, setGuides] = useState<{ v: number[]; h: number[] } | null>(null)
   const frameRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const pos = useIde((st) => st.formPos[doc.name])
   const selected = new Set(selection)
 
   /**
@@ -459,6 +465,60 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     )
   }
 
+  /**
+   * Arrasta a janela do formulário pela barra de título, como uma janela de verdade, dentro da área de trabalho.
+   * Duplo clique na barra volta a centralizar.
+   */
+  function onTitleDown(e: React.PointerEvent): void {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.wincaps')) return
+    const wrap = wrapRef.current
+    const scroller = wrap?.parentElement
+    if (!wrap || !scroller) return
+    e.stopPropagation()
+    e.preventDefault()
+
+    // Duplo clique (reconhecido na 2ª pressão, pelo mesmo motivo do duplo clique nos componentes).
+    const prev = lastTitleDown
+    lastTitleDown = { time: e.timeStamp, x: e.clientX, y: e.clientY }
+    if (prev && e.timeStamp - prev.time < DOUBLE_CLICK_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_CLICK_SLOP) {
+      lastTitleDown = null
+      useIde.getState().setFormPos(doc.name, null)
+      return
+    }
+
+    // A posição é relativa ao lugar "natural" do bloco (canto da área de trabalho, depois do preenchimento).
+    const sr = scroller.getBoundingClientRect()
+    const wr = wrap.getBoundingClientRect()
+    const naturalLeft = sr.left + scroller.clientLeft + SCROLLER_PADDING
+    const naturalTop = sr.top + scroller.clientTop + SCROLLER_PADDING
+    const start = useIde.getState().formPos[doc.name] ?? { x: wr.left - naturalLeft, y: wr.top - naturalTop }
+    const limits = {
+      minX: -(SCROLLER_PADDING - 8), // pode chegar perto da borda da área, não passar dela
+      minY: -(SCROLLER_PADDING - 8),
+      maxX: Math.max(0, scroller.clientWidth - SCROLLER_PADDING - 80), // sempre sobram 80px à vista
+      maxY: Math.max(0, scroller.clientHeight - SCROLLER_PADDING - 60)
+    }
+    const startX = e.clientX
+    const startY = e.clientY
+    let moved = false
+
+    track(
+      e.pointerId,
+      (ev) => {
+        const dx = ev.clientX - startX
+        const dy = ev.clientY - startY
+        if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
+        if (!moved) lastTitleDown = null // virou arrasto: não é o 1º clique de um duplo clique
+        moved = true
+        useIde.getState().setFormPos(doc.name, {
+          x: Math.round(Math.min(Math.max(start.x + dx, limits.minX), Math.max(limits.maxX, limits.minX))),
+          y: Math.round(Math.min(Math.max(start.y + dy, limits.minY), Math.max(limits.maxY, limits.minY)))
+        })
+      },
+      () => {}
+    )
+  }
+
   /** Arrasta a borda direita, a de baixo ou o canto do formulário para mudar o tamanho dele. */
   function onFormGripDown(e: React.PointerEvent, grip: 'e' | 's' | 'se'): void {
     if (e.button !== 0) return
@@ -475,7 +535,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
     // a borda arrastada acompanha o ponteiro com o DOBRO do deslocamento. Se ele é mais largo que a área
     // (encostado à esquerda), só a borda direita anda.
     const scroller = frame.parentElement?.parentElement ?? frame.parentElement
-    const centered = scroller ? frame.getBoundingClientRect().left - scroller.getBoundingClientRect().left > 36 : true
+    const centered = pos === undefined && (scroller ? frame.getBoundingClientRect().left - scroller.getBoundingClientRect().left > 36 : true)
     const factor = centered ? 2 : 1
 
     track(
@@ -549,7 +609,11 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
   const ticks = (length: number): number[] => Array.from({ length: Math.floor(length / 100) + 1 }, (_, i) => i * 100)
 
   return (
-    <div className={`design-wrap${showRulers ? ' with-rulers' : ''}`}>
+    <div
+      ref={wrapRef}
+      className={`design-wrap${showRulers ? ' with-rulers' : ''}${pos ? ' placed' : ''}`}
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
+    >
       {showRulers && (
         <>
           <div className="ruler ruler-h" style={{ width: doc.width }} aria-hidden="true" data-testid="ruler-h">
@@ -569,7 +633,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         </>
       )}
     <div className="form-frame" ref={frameRef}>
-      <div className="form-titlebar">
+      <div className="form-titlebar" data-testid="form-titlebar" title="Arraste para mover a janela; duplo clique para centralizar" onPointerDown={onTitleDown}>
         <span className="form-title-text">{doc.title}</span>
         <span className="wincaps" aria-hidden="true">
           <i>_</i>

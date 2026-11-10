@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Studio } from './helpers'
@@ -31,7 +31,7 @@ test('a aba de código abre o Monaco com o script, sem erro de segurança, e o t
   await s.openCode()
   await expect(s.page.getByTestId('tab-code-Main')).toHaveClass(/active/)
   expect(await s.editorText()).toContain('@form.on_load')
-  await expect(s.page.locator('.monaco-editor.vs')).toBeVisible() // tema claro por padrão
+  await expect(s.page.getByTestId('code-editor').locator('.monaco-editor.vs')).toBeVisible() // tema claro por padrão
 
   await s.focusEditor()
   await s.page.keyboard.press('Control+End')
@@ -102,11 +102,18 @@ test('IDs e propriedades inexistentes ganham aviso na linha; corrigir remove o a
   await s.pasteInEditor('form.btnOk.text = "x"')
   await expect(s.page.locator('.monaco-editor .squiggly-warning')).toHaveCount(0)
 
-  // Renomear o componente na IDE passa a apontar o código antigo (os avisos acompanham o formulário).
+  // Renomear o componente na IDE atualiza o código que o usa: não sobra aviso nenhum.
   await s.page.getByTestId('tab-design-Main').click()
   await s.node('btnOk').click()
   await s.setField('id', 'btnSalvar')
   await s.openCode()
+  expect(await s.editorText()).toContain('form.btnSalvar.text')
+  await expect(s.page.locator('.monaco-editor .squiggly-warning')).toHaveCount(0)
+
+  // Já um ID que realmente não existe (apagado no formulário) continua sendo avisado.
+  await s.focusEditor()
+  await s.page.keyboard.press('Control+a')
+  await s.pasteInEditor('form.btnApagado.text = "x"')
   await expect(s.page.locator('.monaco-editor .squiggly-warning').first()).toBeVisible()
 })
 
@@ -239,23 +246,16 @@ test('reabrir o projeto recarrega o script do disco no editor', async () => {
 test('o editor acompanha o tema escuro', async () => {
   await s.start()
   await s.openCode()
-  await expect(s.page.locator('.monaco-editor.vs')).toBeVisible()
+  await expect(s.page.getByTestId('code-editor').locator('.monaco-editor.vs')).toBeVisible()
   await s.page.getByRole('button', { name: 'Exibir' }).click()
   await s.page.getByRole('menuitem', { name: /tema/ }).click()
-  await expect(s.page.locator('.monaco-editor.vs-dark')).toBeVisible()
+  await expect(s.page.getByTestId('code-editor').locator('.monaco-editor.vs-dark')).toBeVisible()
 })
 
 test('se o editor não carregar, a IDE mostra o erro e continua viva (nunca uma tela em branco)', async () => {
-  await s.start()
+  await s.start({}, undefined, true) // com o pedaço do Monaco bloqueado desde o início
   await s.dropFrom('Button', s.surface, { x: 102, y: 62 })
   await s.setField('id', 'btnOk')
-
-  // Simula uma falha ao carregar o pedaço do Monaco (foi assim que o `npm run dev` ficou em branco).
-  await s.app.evaluate(({ session }) => {
-    session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*CodeEditor*', 'file:///*CodeEditor*'] }, (_details, callback) =>
-      callback({ cancel: true })
-    )
-  })
   await s.node('btnOk').dblclick()
 
   const erro = s.page.getByTestId('code-error')

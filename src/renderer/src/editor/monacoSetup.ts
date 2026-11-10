@@ -41,6 +41,26 @@ monaco.editor.defineTheme('vform-dark', {
   }
 })
 
+/**
+ * Opções do editor de código. Ficam aqui para o editor real e o editor de aquecimento serem idênticos: o Monaco
+ * mede a fonte (e monta várias estruturas) na primeira vez para cada combinação, e é isso que o aquecimento adianta.
+ */
+export const EDITOR_OPTIONS: monaco.editor.IStandaloneEditorConstructionOptions = {
+  language: 'python',
+  automaticLayout: true,
+  minimap: { enabled: false },
+  fontFamily: "'Lucida Console', Consolas, monospace",
+  fontSize: 13,
+  tabSize: 4,
+  insertSpaces: true,
+  detectIndentation: false,
+  scrollBeyondLastLine: false,
+  fixedOverflowWidgets: true,
+  lineNumbersMinChars: 3,
+  padding: { top: 6 },
+  quickSuggestions: { other: true, comments: false, strings: false }
+}
+
 export function themeName(): 'vform-light' | 'vform-dark' {
   return document.documentElement.dataset.theme === 'dark' ? 'vform-dark' : 'vform-light'
 }
@@ -154,3 +174,25 @@ export function setRunMarkers(model: monaco.editor.ITextModel, errors: RunError[
 }
 
 export { monaco }
+
+/**
+ * Aquece o Monaco antes do primeiro uso: cria e descarta um editor invisível com um trecho de Python. Assim os
+ * serviços internos, o realce de sintaxe do Python e a fonte dos ícones já estão carregados quando a pessoa der
+ * o primeiro duplo clique (sem isso, a primeira abertura leva ~1 s mesmo com o código já baixado).
+ */
+export async function warmUpMonaco(): Promise<void> {
+  const host = document.createElement('div')
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;height:200px;visibility:hidden'
+  document.body.appendChild(host)
+  const model = monaco.editor.createModel('@form.on_load\ndef f():\n    pass\n', 'python')
+  const editor = monaco.editor.create(host, { ...EDITOR_OPTIONS, model, theme: themeName(), automaticLayout: false })
+  try {
+    // Dá tempo de o idioma Python (carregado sob demanda) chegar e de o primeiro quadro ser desenhado.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 700))
+  } finally {
+    editor.dispose()
+    model.dispose()
+    host.remove()
+  }
+}

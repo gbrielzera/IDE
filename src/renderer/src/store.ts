@@ -30,6 +30,7 @@ import { parseFormDocument, serializeForm } from './core/model'
 import { isAutoLayout, layoutOf } from './core/props'
 import type { FormNode } from '@shared/project'
 import { buildRunComponents } from './core/runstate'
+import { renameInScript } from './core/refactor'
 import { ensureHandler, eventForDoubleClick } from './core/script'
 import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded } from '@shared/run'
 import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
@@ -78,6 +79,12 @@ interface IdeState {
    * copiar a cada atualização devolveria à tela um eco atrasado do que foi digitado e apagaria teclas.
    */
   scriptSync: Record<string, number>
+  /**
+   * Posição da janela do formulário na área de trabalho (px, a partir do canto superior esquerdo da área).
+   * Sem entrada, o formulário fica centralizado. É só de visualização: não vai para o arquivo do projeto.
+   */
+  formPos: Record<string, { x: number; y: number }>
+  setFormPos(form: string, pos: { x: number; y: number } | null): void
   /** Componentes copiados (área de transferência interna da IDE; vale entre formulários). */
   clipboard: FormNode[] | null
   /** Quantas vezes o mesmo conteúdo foi colado em sequência (cada colagem se desloca um pouco mais). */
@@ -194,6 +201,7 @@ export const useIde = create<IdeState>((set, get) => {
             project.manifest.forms.map((f) => [f.name, (get().scriptSync[f.name] ?? 0) + 1])
           ),
           runErrors: {},
+          formPos: {},
           reveal: null,
           activeView: 'design',
           selection: [],
@@ -209,6 +217,25 @@ export const useIde = create<IdeState>((set, get) => {
     } finally {
       set({ busy: false })
     }
+  }
+
+  /**
+   * Aplica ao script do formulário ativo os renomeios de IDs (ao renomear, desfazer ou refazer), para o código
+   * e o layout nunca divergirem. Devolve quantas referências foram atualizadas.
+   */
+  function applyRenamesToScript(renames: HistoryEntry['renames'], direction: 'undo' | 'redo'): number {
+    const form = get().activeForm
+    if (!form || !renames?.length) return 0
+    const steps = direction === 'undo' ? [...renames].reverse().map(([from, to]) => [to, from] as const) : renames
+    let script = get().scripts[form] ?? ''
+    let total = 0
+    for (const [from, to] of steps) {
+      const r = renameInScript(script, from, to)
+      script = r.script
+      total += r.count
+    }
+    if (total > 0) get().setScript(form, script, 'external')
+    return total
   }
 
   function selectionRoots(): string[] {
@@ -230,6 +257,7 @@ export const useIde = create<IdeState>((set, get) => {
     scripts: {},
     scriptDirty: {},
     scriptSync: {},
+    formPos: {},
     clipboard: null,
     pasteCount: 0,
     settings: DEFAULT_SETTINGS,
@@ -247,6 +275,8 @@ export const useIde = create<IdeState>((set, get) => {
     async setSetting(key, value) {
       set((s) => ({ settings: { ...s.settings, [key]: value } })) // vale já; a gravação em disco vem depois
       set({ settings: await window.vform.settings.set({ [key]: value }) })
+      // Ligar o "ao vivo" abre a prévia ao lado da IDE na hora (como o Live Preview do VS Code).
+      if (key === 'livePreview' && value === true && !get().running && get().project && get().activeForm) void get().run()
     },
 
     async saveProject(opts) {
@@ -275,6 +305,14 @@ export const useIde = create<IdeState>((set, get) => {
     },
 
     setActiveForm: (name) => set({ activeForm: name, selection: [] }),
+
+    setFormPos: (form, pos) =>
+      set((s) => {
+        const next = { ...s.formPos }
+        if (pos) next[form] = pos
+        else delete next[form]
+        return { formPos: next }
+      }),
 
     openTab: (form, view) =>
       set((s) => ({ activeForm: form, activeView: view, selection: form === s.activeForm ? s.selection : [] })),
@@ -312,6 +350,7 @@ export const useIde = create<IdeState>((set, get) => {
       const next = undoHistory(t)
       const ids = pruneSelection(next.doc, followRenames(selection, entry.renames, 'undo'))
       set({ tracked: { ...tracked, [activeForm]: next }, selection: ids, dirty: true })
+      applyRenamesToScript(entry.renames, 'undo')
     },
 
     redo() {
@@ -322,6 +361,7 @@ export const useIde = create<IdeState>((set, get) => {
       const next = redoHistory(t)
       const ids = pruneSelection(next.doc, followRenames(selection, entry.renames, 'redo'))
       set({ tracked: { ...tracked, [activeForm]: next }, selection: ids, dirty: true })
+      applyRenamesToScript(entry.renames, 'redo')
     },
 
     addComponent(type, parentId, x, y, index) {
@@ -349,6 +389,12 @@ export const useIde = create<IdeState>((set, get) => {
       if (allIds(doc).has(newId)) return `Já existe um componente com o ID "${newId}".`
       get().edit((d) => renameNode(d, id, newId), undefined, [[id, newId]])
       set((s) => ({ selection: s.selection.map((s2) => (s2 === id ? newId : s2)) }))
+      // O código Python que usa o ID antigo acompanha a mudança.
+      const updated = applyRenamesToScript([[id, newId]], 'redo')
+      if (updated > 0) {
+        const file = get().project?.manifest.forms.find((f) => f.name === get().activeForm)?.script
+        get().log('info', `ID renomeado: "${id}" → "${newId}" (${updated} referência${updated === 1 ? '' : 's'} atualizada${updated === 1 ? '' : 's'} em ${file ?? 'o script'}).`)
+      }
       return null
     },
 
@@ -375,6 +421,8 @@ export const useIde = create<IdeState>((set, get) => {
       set({ runErrors: {} })
       const res = await window.vform.run.start({
         reuse: refresh,
+        // Com a pré-visualização ao vivo ligada, a janela nova abre ao lado da IDE.
+        dock: !refresh && get().settings.livePreview,
         formName: form.name,
         scriptPath: form.script,
         // Texto alterado no editor e ainda não salvo vale; senão o main lê o arquivo do disco (edição externa).

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, screen, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle } from 'electron'
 import { existsSync, promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { FormDocument } from '@shared/project'
@@ -42,6 +42,7 @@ function parsePayload(raw: unknown): RunPayload | null {
   if (typeof p.formName !== 'string' || typeof p.scriptPath !== 'string') return null
   if (p.script !== undefined && typeof p.script !== 'string') return null
   if (p.reuse !== undefined && typeof p.reuse !== 'boolean') return null
+  if (p.dock !== undefined && typeof p.dock !== 'boolean') return null
   if (!doc || typeof doc.width !== 'number' || typeof doc.height !== 'number' || !Array.isArray(doc.children)) return null
   if (typeof p.components !== 'object' || p.components === null) return null
   return p as RunPayload
@@ -55,6 +56,50 @@ function ideConsole(run: Run, msg: RunConsoleMessage): void {
   toIde(run, 'run:console', msg)
 }
 
+/** Tamanho/posição da IDE antes de encaixar a prévia ao lado, para devolvê-la ao fechar a prévia. */
+interface DockState {
+  bounds: Rectangle
+  maximized: boolean
+}
+const dockStates = new Map<number, DockState>()
+
+/** A IDE precisa de pelo menos isto de largura (é o `minWidth` da janela); o resto da tela vai para a prévia. */
+const MIN_IDE_WIDTH = 960
+const MIN_PREVIEW_WIDTH = 320
+
+/**
+ * Encaixa a janela de execução na direita da tela e reduz a IDE para ocupar o resto (como o Live Preview do
+ * VS Code abre a prévia ao lado do código). Sem espaço para as duas, a prévia só abre normalmente.
+ */
+function dockBeside(ide: BrowserWindow, win: BrowserWindow, contentWidth: number, contentHeight: number): boolean {
+  const area = screen.getDisplayMatching(ide.getBounds()).workArea
+  const [outerW, outerH] = win.getSize()
+  const [innerW, innerH] = win.getContentSize()
+  let width = Math.round(contentWidth) + (outerW - innerW) // a moldura do sistema também ocupa espaço
+  const height = Math.min(Math.round(contentHeight) + (outerH - innerH), area.height)
+  width = Math.min(width, area.width - MIN_IDE_WIDTH, Math.round(area.width * 0.6))
+  if (width < MIN_PREVIEW_WIDTH) return false // a tela é pequena demais: abre normalmente
+
+  if (!dockStates.has(ide.id)) dockStates.set(ide.id, { bounds: ide.getBounds(), maximized: ide.isMaximized() })
+  if (ide.isMaximized()) ide.unmaximize()
+  ide.setBounds({ x: area.x, y: area.y, width: area.width - width, height: area.height })
+  win.setBounds({ x: area.x + area.width - width, y: area.y, width, height })
+  return true
+}
+
+/** Devolve a IDE ao tamanho anterior, a menos que outra prévia tenha acabado de assumir o lugar da que fechou. */
+function scheduleDockRestore(ide: BrowserWindow): void {
+  const state = dockStates.get(ide.id)
+  if (!state) return
+  setTimeout(() => {
+    if (byIde.has(ide.id)) return // outra execução (F5 de novo) já está em andamento: continua encaixada
+    dockStates.delete(ide.id)
+    if (ide.isDestroyed()) return
+    ide.setBounds(state.bounds)
+    if (state.maximized) ide.maximize()
+  }, 250)
+}
+
 function endRun(run: Run, reason: RunEnded['reason'], code: number | null = null): void {
   if (run.ended) return
   run.ended = true
@@ -63,6 +108,7 @@ function endRun(run: Run, reason: RunEnded['reason'], code: number | null = null
   run.host.stop()
   if (!run.win.isDestroyed()) run.win.close()
   toIde(run, 'run:ended', { runId: run.id, reason, code } satisfies RunEnded)
+  scheduleDockRestore(run.ide)
 }
 
 export function stopRunFor(ideWindowId: number): void {
@@ -198,6 +244,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
     }
   })
   win.setMenuBarVisibility(false)
+  if (payload.dock === true) dockBeside(ide, win, doc.width, doc.height)
 
   const run: Run = {
     id: nextRunId++,

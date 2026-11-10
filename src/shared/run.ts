@@ -18,6 +18,11 @@ export interface RunPayload {
    * em vez de abrir outra. Se não houver janela aberta, não faz nada.
    */
   reuse?: boolean
+  /**
+   * Abre a janela de execução encaixada AO LADO da IDE (a IDE passa a ocupar o resto da tela), como o Live
+   * Preview do VS Code. Ao fechar a prévia, a IDE volta ao tamanho que tinha.
+   */
+  dock?: boolean
   doc: FormDocument
   components: Record<string, RunComponent>
 }

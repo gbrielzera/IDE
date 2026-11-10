@@ -1255,3 +1255,16 @@ body:has(.fatal-error) {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
 }
+
+/* ---------- Janela do formulário movível ---------- */
+.form-titlebar {
+  cursor: grab;
+  touch-action: none;
+}
+.form-titlebar:active {
+  cursor: grabbing;
+}
+/* Com posição própria o bloco deixa de ser centralizado e é deslocado a partir do canto da área de trabalho. */
+.design-wrap.placed {
+  margin: 0;
+}

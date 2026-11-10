@@ -5,7 +5,7 @@ import { MenuBar } from './editor/MenuBar'
 import { Toolbar } from './editor/Toolbar'
 import { Palette } from './editor/Palette'
 import { OutlineTree } from './editor/OutlineTree'
-import { CanvasArea } from './editor/CanvasArea'
+import { CanvasArea, preloadAndWarmCodeEditor } from './editor/CanvasArea'
 import { PropertyPanel } from './editor/PropertyPanel'
 import { ConsolePanel } from './editor/ConsolePanel'
 import { StatusBar } from './editor/StatusBar'
@@ -13,6 +13,9 @@ import { Welcome } from './editor/Welcome'
 
 /** Espera depois da última alteração antes de salvar sozinho. */
 const AUTOSAVE_DELAY_MS = 1500
+
+/** Espera depois da primeira tela antes de carregar o editor de código (a IDE abre sem pesar). */
+const EDITOR_PRELOAD_DELAY_MS = 600
 
 /** Pausa depois da última alteração antes de atualizar a pré-visualização ao vivo. */
 const LIVE_PREVIEW_DELAY_MS = 700
@@ -140,7 +143,24 @@ function useLivePreview(): void {
   }, [])
 }
 
+/** Carrega o editor de código em segundo plano, sem atrapalhar a primeira tela. */
+function useEditorPreload(): void {
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () =>
+        void preloadAndWarmCodeEditor()
+          .catch(() => undefined)
+          .finally(() => {
+            document.documentElement.dataset.editorWarm = '1' // sinal para os testes: a carga pesada acabou
+          }),
+      EDITOR_PRELOAD_DELAY_MS
+    )
+    return () => window.clearTimeout(timer)
+  }, [])
+}
+
 export function App(): React.JSX.Element {
+  useEditorPreload()
   useShortcuts()
   useLivePreview()
   useRunEvents()

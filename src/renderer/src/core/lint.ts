@@ -10,21 +10,49 @@ export interface Diagnostic {
   message: string
 }
 
-/** Troca por espaços o que está dentro de strings e comentários, mantendo as posições. */
+/**
+ * Troca por espaços o que está dentro de strings e comentários, mantendo as posições.
+ * Em f-strings (`f"Olá, {form.txtNome.value}"`) o que está entre chaves é código e fica visível.
+ */
 export function maskLine(line: string): string {
   let out = ''
   let quote: string | null = null
+  let fstring = false
+  let depth = 0 // chaves abertas de uma expressão dentro de f-string
   for (let i = 0; i < line.length; i++) {
     const c = line[i]
     if (quote) {
-      out += ' '
-      if (c === '\\') {
-        out += ' '
+      if (fstring && depth > 0) {
+        // Dentro de {expressão}: é código.
+        if (c === '{') {
+          depth++
+          out += c
+        } else if (c === '}') {
+          depth--
+          out += depth === 0 ? ' ' : c
+        } else out += c
+      } else if (c === '\\') {
+        out += i + 1 < line.length ? '  ' : ' '
         i++
-      } else if (c === quote) quote = null
+      } else if (c === quote) {
+        quote = null
+        fstring = false
+        out += ' '
+      } else if (fstring && c === '{') {
+        if (line[i + 1] === '{') {
+          out += '  ' // `{{` é uma chave literal
+          i++
+        } else {
+          depth = 1
+          out += ' '
+        }
+      } else out += ' '
     } else if (c === '#') {
       return out + ' '.repeat(line.length - i)
     } else if (c === '"' || c === "'") {
+      let prefix = ''
+      for (let j = i - 1; j >= 0 && /[A-Za-z]/.test(line[j]) && prefix.length < 2; j--) prefix = line[j] + prefix
+      fstring = /f/i.test(prefix)
       quote = c
       out += ' '
     } else out += c
@@ -73,7 +101,7 @@ export function lintScript(script: string, doc: FormDocument | null): Diagnostic
 
   script.split('\n').forEach((raw, index) => {
     const line = maskLine(raw)
-    for (const m of line.matchAll(/(?<![\w.])form\.(\w+)(?:\.(\w+))?/g)) {
+    for (const m of line.matchAll(/(?<![\p{L}\p{N}_.])form\.([\p{L}\p{N}_]+)(?:\.([\p{L}\p{N}_]+))?/gu)) {
       const id = m[1]
       const idStart = m.index + 'form.'.length
       if (id === 'on_load') continue
@@ -98,7 +126,7 @@ export function lintScript(script: string, doc: FormDocument | null): Diagnostic
         }
       }
     }
-    for (const m of line.matchAll(/(?<![\w.])app\.(\w+)/g)) {
+    for (const m of line.matchAll(/(?<![\p{L}\p{N}_.])app\.([\p{L}\p{N}_]+)/gu)) {
       if (!appNames.includes(m[1])) {
         const start = m.index + 'app.'.length
         out.push({

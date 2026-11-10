@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useIde } from '../store'
-import { modelFor, monaco, setLintMarkers, setRunMarkers, themeName } from './monacoSetup'
+import { EDITOR_OPTIONS, modelFor, monaco, setLintMarkers, setRunMarkers, themeName } from './monacoSetup'
+
+export { warmUpMonaco } from './monacoSetup'
 
 /** Acompanha a troca de tema claro/escuro da IDE. */
 function useMonacoTheme(): string {
@@ -30,23 +32,7 @@ export default function CodeEditor({ formName }: { formName: string }): React.JS
   useEffect(() => {
     if (!host.current) return
     const model = modelFor(formName, useIde.getState().scripts[formName] ?? '')
-    const editor = monaco.editor.create(host.current, {
-      model,
-      language: 'python',
-      theme: themeName(),
-      automaticLayout: true,
-      minimap: { enabled: false },
-      fontFamily: "'Lucida Console', Consolas, monospace",
-      fontSize: 13,
-      tabSize: 4,
-      insertSpaces: true,
-      detectIndentation: false,
-      scrollBeyondLastLine: false,
-      fixedOverflowWidgets: true,
-      lineNumbersMinChars: 3,
-      padding: { top: 6 },
-      quickSuggestions: { other: true, comments: false, strings: false }
-    })
+    const editor = monaco.editor.create(host.current, { ...EDITOR_OPTIONS, model, theme: themeName() })
     editorRef.current = editor
     modelRef.current = model
     const subscription = model.onDidChangeContent(() => useIde.getState().setScript(formName, model.getValue()))

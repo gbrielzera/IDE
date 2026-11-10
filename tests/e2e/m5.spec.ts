@@ -242,13 +242,14 @@ test('pré-visualização ao vivo: a janela de execução se atualiza com o form
 
   const live = s.page.getByTestId('toggle-live')
   await expect(live).toHaveAttribute('aria-pressed', 'false')
-  await live.click()
-  await expect(live).toHaveAttribute('aria-pressed', 'true')
-  await expect.poll(async () => (await readJson(join(s.profile, 'settings.json'))).livePreview).toBe(true)
 
-  const rp = await s.runForm()
+  // Ligar o "ao vivo" já abre a prévia (ao lado da IDE): não é preciso apertar F5.
+  const [rp] = await Promise.all([s.app.waitForEvent('window'), live.click()])
+  await rp.waitForSelector('.run-root')
   const botao = run(rp, 'btnOk').locator('button')
   await expect(botao).toHaveText('Um')
+  await expect(live).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => (await readJson(join(s.profile, 'settings.json'))).livePreview).toBe(true)
 
   // Mudança no formulário: a mesma janela passa a mostrar o texto novo (sem abrir outra).
   await s.node('btnOk').click()
@@ -274,7 +275,6 @@ test('pré-visualização ao vivo: a janela de execução se atualiza com o form
   await expect(botao).toHaveText('do script')
 
   // Fechar a janela e continuar editando não a reabre.
-  await live.click() // liga de novo
   await rp.close()
   await expect(s.page.getByRole('button', { name: /Parar/ })).toBeDisabled()
   await s.setField('text', 'Quatro')

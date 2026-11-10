@@ -137,9 +137,9 @@ export function typeOfId(doc: FormDocument | null, id: string): string | null {
   return found
 }
 
-const FORM_RE = /(?<![\w.])form\.(\w*)$/
-const MEMBER_RE = /(?<![\w.])form\.(\w+)\.(\w*)$/
-const APP_RE = /(?<![\w.])app\.(\w*)$/
+const FORM_RE = /(?<![\p{L}\p{N}_.])form\.[\p{L}\p{N}_]*$/u
+const MEMBER_RE = /(?<![\p{L}\p{N}_.])form\.([\p{L}\p{N}_]+)\.[\p{L}\p{N}_]*$/u
+const APP_RE = /(?<![\p{L}\p{N}_.])app\.[\p{L}\p{N}_]*$/u
 
 /**
  * Sugestões para o texto da linha até o cursor, ou null se o contexto não é nosso
