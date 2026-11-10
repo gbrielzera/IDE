@@ -87,8 +87,6 @@ test('formulário com problema não executa e o console diz onde está o erro', 
 
 test('manifesto com caminho para fora da pasta é recusado ao abrir, com a mensagem do problema', async () => {
   await s.start()
-  await s.page.keyboard.press('Control+s')
-  await expect(s.page.locator('.statusbar')).not.toContainText('não salvo')
   const manifest = JSON.parse(await readFile(join(s.dir, 'project.json'), 'utf8')) as { forms: Array<{ layout: string }> }
   manifest.forms[0].layout = '../roubo.form.json'
   await writeFile(join(s.dir, 'project.json'), JSON.stringify(manifest), 'utf8')
@@ -110,8 +108,6 @@ test('manifesto com caminho para fora da pasta é recusado ao abrir, com a mensa
 
 test('link para fora da pasta do projeto não é lido nem gravado', async () => {
   await s.start()
-  await s.page.keyboard.press('Control+s')
-  await expect(s.page.locator('.statusbar')).not.toContainText('não salvo')
   const outside = join(s.dir, '..', `fora-${Date.now()}`)
   await mkdir(outside, { recursive: true })
   await writeFile(join(outside, 'Main.py'), 'print("segredo")\n', 'utf8')

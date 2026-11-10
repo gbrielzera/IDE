@@ -189,6 +189,11 @@ function onPythonMessage(run: Run, msg: PyMessage): void {
       if (changes.length > 0 && !run.win.isDestroyed()) run.win.webContents.send('run:message', { type: 'patch', changes })
       break
     }
+    case 'command':
+      // Pedidos do script à janela de execução (foco). Só os nomes conhecidos, para um id/nome qualquer não passar adiante.
+      if (typeof msg.id === 'string' && (msg.name === 'focus' || msg.name === 'blur') && !run.win.isDestroyed())
+        run.win.webContents.send('run:message', { type: 'command', id: msg.id, name: msg.name })
+      break
     case 'loaded':
       clearLoadTimer(run)
       break

@@ -45,6 +45,12 @@
       "label": "Cor de fundo",
       "type": "color",
       "default": ""
+    },
+    "tooltip": {
+      "key": "tooltip",
+      "label": "Dica (tooltip)",
+      "type": "string",
+      "default": ""
     }
   },
   "methods": {
@@ -72,6 +78,66 @@
       "detail": "add_row(linha)",
       "doc": "Acrescenta uma linha (lista de valores).",
       "insert": "add_row($0)"
+    },
+    "show": {
+      "detail": "show()",
+      "doc": "Exibe o componente.",
+      "insert": "show()"
+    },
+    "hide": {
+      "detail": "hide()",
+      "doc": "Oculta o componente (ele continua existindo, só some da tela).",
+      "insert": "hide()"
+    },
+    "set_visible": {
+      "detail": "set_visible(visível)",
+      "doc": "Mostra (True) ou oculta (False).",
+      "insert": "set_visible($0)"
+    },
+    "enable": {
+      "detail": "enable()",
+      "doc": "Habilita o componente.",
+      "insert": "enable()"
+    },
+    "disable": {
+      "detail": "disable()",
+      "doc": "Desabilita o componente (fica cinza e não responde).",
+      "insert": "disable()"
+    },
+    "set_enabled": {
+      "detail": "set_enabled(habilitado)",
+      "doc": "Habilita (True) ou desabilita (False).",
+      "insert": "set_enabled($0)"
+    },
+    "focus": {
+      "detail": "focus()",
+      "doc": "Leva o foco do teclado para o componente.",
+      "insert": "focus()"
+    },
+    "blur": {
+      "detail": "blur()",
+      "doc": "Tira o foco do teclado do componente.",
+      "insert": "blur()"
+    },
+    "set_tooltip": {
+      "detail": "set_tooltip(texto)",
+      "doc": "Define a dica que aparece ao parar o mouse em cima.",
+      "insert": "set_tooltip($0)"
+    },
+    "set_position": {
+      "detail": "set_position(x, y)",
+      "doc": "Muda a posição (px). Num painel com layout automático, quem manda na posição é o painel.",
+      "insert": "set_position($0)"
+    },
+    "set_size": {
+      "detail": "set_size(largura, altura)",
+      "doc": "Muda o tamanho (px, mínimo 1).",
+      "insert": "set_size($0)"
+    },
+    "reset": {
+      "detail": "reset()",
+      "doc": "Volta as propriedades do componente aos valores padrão (posição e tamanho não mudam).",
+      "insert": "reset()"
     }
   },
   "components": [
@@ -107,7 +173,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -115,7 +182,18 @@
           "doc": "Quando o usuário clica."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
       "help": {
         "resumo": "Um texto fixo na tela, que o usuário só lê.",
         "paraQue": "Títulos, explicações e mensagens de resultado (\"Salvo com sucesso\").",
@@ -155,7 +233,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "aliases": {
         "text": "value"
@@ -166,7 +245,20 @@
           "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
       "help": {
         "resumo": "Uma caixinha onde o usuário digita uma linha de texto.",
         "paraQue": "Pedir nome, e-mail, número... qualquer resposta curta.",
@@ -200,7 +292,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "aliases": {
         "text": "value"
@@ -211,7 +304,20 @@
           "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
       "help": {
         "resumo": "Uma caixa grande para digitar vários parágrafos.",
         "paraQue": "Observações, comentários, textos longos.",
@@ -239,7 +345,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -247,7 +354,20 @@
           "doc": "Quando o usuário clica."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
       "help": {
         "resumo": "Um botão que o usuário clica para pedir uma ação.",
         "paraQue": "Salvar, enviar, calcular, limpar... é onde você liga o seu código.",
@@ -281,7 +401,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -289,7 +410,20 @@
           "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
       "help": {
         "resumo": "Uma caixinha de marcar, com duas respostas: marcada ou não.",
         "paraQue": "Opções de sim/não, como \"Lembrar de mim\".",
@@ -327,7 +461,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "selectedItem": true,
       "events": [
@@ -340,7 +475,19 @@
         "add_item",
         "remove_item",
         "remove_at",
-        "clear"
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
       ],
       "help": {
         "resumo": "Um grupo de bolinhas em que só uma pode ser escolhida.",
@@ -379,7 +526,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "selectedItem": true,
       "events": [
@@ -392,7 +540,19 @@
         "add_item",
         "remove_item",
         "remove_at",
-        "clear"
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
       ],
       "help": {
         "resumo": "Uma lista que se abre ao clicar, para escolher um item.",
@@ -432,7 +592,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "selectedItem": true,
       "events": [
@@ -449,7 +610,19 @@
         "add_item",
         "remove_item",
         "remove_at",
-        "clear"
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
       ],
       "help": {
         "resumo": "Uma lista sempre visível, com os itens um embaixo do outro.",
@@ -485,7 +658,8 @@
       "common": [
         "enabled",
         "visible",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -493,7 +667,18 @@
           "doc": "Quando o usuário clica."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
       "help": {
         "resumo": "Uma figura, como uma foto ou um logotipo.",
         "paraQue": "Deixar a tela mais bonita ou mostrar uma imagem do seu projeto.",
@@ -551,7 +736,8 @@
       "common": [
         "enabled",
         "visible",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -559,7 +745,18 @@
           "doc": "Quando o usuário clica."
         }
       ],
-      "methods": [],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
       "help": {
         "resumo": "Uma caixa que guarda outros componentes dentro dela.",
         "paraQue": "Agrupar partes da tela e organizá-las automaticamente em coluna ou linha.",
@@ -599,7 +796,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "events": [
         {
@@ -611,7 +809,17 @@
         "add_item",
         "remove_item",
         "remove_at",
-        "clear"
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
       ],
       "help": {
         "resumo": "Várias \"páginas\" na mesma tela, escolhidas por abas no topo.",
@@ -644,7 +852,8 @@
         "bold",
         "italic",
         "color",
-        "background"
+        "background",
+        "tooltip"
       ],
       "runtimeProps": {
         "rows": [],
@@ -659,7 +868,19 @@
       "methods": [
         "add_row",
         "remove_at",
-        "clear"
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
       ],
       "help": {
         "resumo": "Uma tabela com linhas e colunas.",

@@ -133,6 +133,8 @@ export const GUIDES: Guide[] = [
       { tipo: 'li', texto: 'Digite "form." e a lista de IDs aparece; depois do ID, aparecem as propriedades e ações dele.' },
       { tipo: 'li', texto: 'IDs ou propriedades que não existem ganham um aviso sublinhado na linha.' },
       { tipo: 'li', texto: 'Renomear um ID no painel Propriedades atualiza o código automaticamente (e Desfazer volta o código também).' },
+      { tipo: 'p', texto: 'Ações que quase todo componente entende (cada tipo só oferece as que fazem sentido para ele):' },
+      { tipo: 'code', texto: 'form.btnSalvar.hide()          # esconde  (show() mostra)\nform.btnSalvar.disable()       # desabilita  (enable() habilita)\nform.txtNome.focus()           # leva o cursor para o campo\nform.btnSalvar.set_tooltip("Grava os dados")\nform.btnSalvar.set_position(20, 300)\nform.btnSalvar.set_size(120, 32)\nform.txtNome.reset()           # volta ao padrão (não mexe em posição e tamanho)' },
       { tipo: 'li', texto: 'Erros do programa em execução aparecem no Console; clicar na linha do erro leva ao código.' }
     ]
   },
@@ -209,6 +211,7 @@ export const NOVIDADES: Novidade[] = [
   {
     titulo: 'Versão atual',
     itens: [
+      'API comum de componentes: show/hide, enable/disable, focus/blur, set_tooltip, set_position, set_size e reset, declaradas no registro por tipo.',
       'Identidade estável: cada componente tem um uid interno; renomear o ID mantém seleção, histórico e a tela. Projetos antigos são atualizados (com cópia .bak).',
       'Component Registry: os componentes (propriedades, eventos, ações e ajuda) vêm de um único arquivo, lido pela IDE e pelo Python.',
       'Segurança: caminhos e links validados, limites no protocolo com o Python, prazo de carregamento e aviso de confiança.',

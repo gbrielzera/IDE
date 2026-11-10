@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from .runtime import Runtime
 
-from .registry import ALIASES, EVENTS, METHODS, SELECTED_ITEM, list_props  # noqa: E402  (tabelas vêm do registro)
+from .registry import ALIASES, EVENTS, METHODS, SELECTED_ITEM, defaults, list_props  # noqa: E402  (tabelas vêm do registro)
 
 
 def to_camel(name: str) -> str:
@@ -172,6 +172,70 @@ class Component:
         """`btn.on("click", fn)` ou, como decorador, `@btn.on("click")`."""
         register = self._registrar(event)
         return register(fn) if fn is not None else register
+
+    # ----- API comum (quais tipos têm cada método vem do registro) -----
+    def show(self) -> None:
+        self._require("show")
+        self._set("visible", True)
+
+    def hide(self) -> None:
+        self._require("hide")
+        self._set("visible", False)
+
+    def set_visible(self, visible: Any) -> None:
+        self._require("set_visible")
+        self._set("visible", bool(visible))
+
+    def enable(self) -> None:
+        self._require("enable")
+        self._set("enabled", True)
+
+    def disable(self) -> None:
+        self._require("disable")
+        self._set("enabled", False)
+
+    def set_enabled(self, enabled: Any) -> None:
+        self._require("set_enabled")
+        self._set("enabled", bool(enabled))
+
+    def set_tooltip(self, text: Any) -> None:
+        self._require("set_tooltip")
+        self._set("tooltip", "" if text is None else str(text))
+
+    def _number(self, value: Any, what: str, minimum: float | None = None) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value or value in (float("inf"), float("-inf")):
+            raise TypeError(f"{what} deve ser um número (recebeu {value!r}).")
+        if minimum is not None and value < minimum:
+            raise ValueError(f"{what} deve ser pelo menos {minimum} (recebeu {value!r}).")
+        return int(value) if float(value).is_integer() else value
+
+    def set_position(self, x: Any, y: Any) -> None:
+        self._require("set_position")
+        nx, ny = self._number(x, "x"), self._number(y, "y")
+        self._set("x", nx)
+        self._set("y", ny)
+
+    def set_size(self, width: Any, height: Any) -> None:
+        self._require("set_size")
+        w, h = self._number(width, "largura", 1), self._number(height, "altura", 1)
+        self._set("width", w)
+        self._set("height", h)
+
+    def focus(self) -> None:
+        self._require("focus")
+        self._runtime.flush()  # o que o script já alterou chega antes do pedido de foco
+        self._runtime.send({"type": "command", "id": self._id, "name": "focus"})
+
+    def blur(self) -> None:
+        self._require("blur")
+        self._runtime.flush()
+        self._runtime.send({"type": "command", "id": self._id, "name": "blur"})
+
+    def reset(self) -> None:
+        """Volta as propriedades aos valores padrão do tipo. Posição, tamanho e ID não mudam."""
+        self._require("reset")
+        for key, value in defaults(self._type).items():
+            self._set(key, value)
 
     # ----- métodos de listas (ComboBox, ListBox, RadioGroup, Tabs, Table) -----
     def _require(self, method: str) -> None:

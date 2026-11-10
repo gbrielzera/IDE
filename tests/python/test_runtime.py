@@ -532,3 +532,76 @@ class RegistryTest(unittest.TestCase):
         h = Harness()
         h.load("form.btnOk.add_item('x')")
         self.assertIn("não tem o método 'add_item'", h.errors()[0]["text"])
+
+
+class CommonApiTest(unittest.TestCase):
+    def changes(self, h: Harness) -> list:
+        return [c for m in h.of("patch") for c in m["changes"]]
+
+    def test_mostrar_ocultar_habilitar_e_dica(self) -> None:
+        h = Harness()
+        h.load("""
+            form.btnOk.hide()
+            form.btnOk.disable()
+            form.btnOk.set_tooltip("Salva")
+            form.btnOk.show()
+        """)
+        self.assertEqual(
+            self.changes(h),
+            [
+                {"id": "btnOk", "prop": "visible", "value": True},  # a última escrita vence
+                {"id": "btnOk", "prop": "enabled", "value": False},
+                {"id": "btnOk", "prop": "tooltip", "value": "Salva"},
+            ],
+        )
+
+    def test_set_visible_e_set_enabled_aceitam_booleanos(self) -> None:
+        h = Harness()
+        h.load("form.btnOk.set_visible(0)\nform.btnOk.set_enabled(False)")
+        self.assertEqual(
+            self.changes(h),
+            [{"id": "btnOk", "prop": "visible", "value": False}, {"id": "btnOk", "prop": "enabled", "value": False}],
+        )
+
+    def test_posicao_e_tamanho_validam_os_argumentos(self) -> None:
+        h = Harness()
+        h.load("form.btnOk.set_position(10, 20.5)\nform.btnOk.set_size(100, 40)")
+        got = {(c["prop"], c["value"]) for c in self.changes(h)}
+        self.assertEqual(got, {("x", 10), ("y", 20.5), ("height", 40)})  # a largura já era 100: não muda
+        for bad in ("form.btnOk.set_position('a', 1)", "form.btnOk.set_size(0, 10)", "form.btnOk.set_size(True, 10)"):
+            h = Harness()
+            h.load(bad)
+            self.assertEqual(len(h.errors()), 1, bad)
+
+    def test_focus_envia_comando_depois_das_alteracoes(self) -> None:
+        h = Harness()
+        h.load("form.txtNome.text = 'novo'\nform.txtNome.focus()\nform.txtNome.blur()")
+        kinds = [m["type"] for m in h.sent]
+        self.assertLess(kinds.index("patch"), kinds.index("command"))
+        self.assertEqual(h.of("command"), [
+            {"type": "command", "id": "txtNome", "name": "focus"},
+            {"type": "command", "id": "txtNome", "name": "blur"},
+        ])
+
+    def test_metodos_que_o_tipo_nao_tem_dao_erro_claro(self) -> None:
+        h = Harness()
+        h.load("form.lblInfo.focus()")  # Label não recebe foco
+        self.assertIn("não tem o método 'focus'", h.errors()[0]["text"])
+
+    def test_reset_volta_ao_padrao_sem_mexer_em_posicao_e_tamanho(self) -> None:
+        h = Harness()
+        h.load("""
+            form.cbUF.add_item("SP")
+            form.cbUF.selected_index = 1
+            form.cbUF.set_tooltip("x")
+            form.cbUF.set_position(5, 5)
+            form.cbUF.reset()
+        """)
+        got = {c["prop"]: c["value"] for c in self.changes(h)}
+        self.assertEqual((got["x"], got["y"]), (5, 5))  # posição e tamanho não são tocados pelo reset
+        self.assertNotIn("width", got)
+        self.assertEqual(got["items"], ["Item 1", "Item 2"])  # volta aos valores padrão do tipo (os do registro)
+        self.assertEqual((got["selectedIndex"], got["tooltip"]), (-1, ""))
+        h.clear()
+        h.event("cbUF", "change")  # o runtime segue vivo
+        self.assertEqual(h.errors(), [])

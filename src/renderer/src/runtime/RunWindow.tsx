@@ -227,7 +227,7 @@ function RunNode({ node, parent }: { node: FormNode; parent: FormNode | null }):
       : (node.children ?? [])
 
   return (
-    <div className="run-node" data-run-id={node.id} style={style}>
+    <div className="run-node" data-run-id={node.id} style={style} title={typeof p.tooltip === 'string' && p.tooltip ? p.tooltip : undefined}>
       <div className="run-ctl" style={appearanceStyle(self)}>
         <Control node={node} p={p} />
       </div>
@@ -252,6 +252,14 @@ export function RunApp(): React.JSX.Element {
     const api = window.vform.run
     let alive = true
     const off = api.onMessage((msg) => {
+      if (msg.type === 'command') {
+        // focus()/blur() do script: acha o controle real do componente e leva (ou tira) o foco.
+        const root = document.querySelector(`[data-run-id="${CSS.escape(msg.id)}"]`)
+        const el = root?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), select:not([disabled]), [tabindex]')
+        if (msg.name === 'focus') el?.focus()
+        else (document.activeElement instanceof HTMLElement && root?.contains(document.activeElement) ? document.activeElement : el)?.blur()
+        return
+      }
       if (msg.type !== 'patch') return
       for (const c of msg.changes) if (c.id === ':form' && c.prop === 'title') document.title = String(c.value)
       dispatch({ type: 'set', changes: msg.changes })

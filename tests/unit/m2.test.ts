@@ -46,7 +46,7 @@ describe('catálogo e propriedades', () => {
     expect(propDef('Label', 'nada')).toBeUndefined()
     const { own, common } = allPropDefs('Panel')
     expect(own.map((p) => p.key)).toEqual(['layout', 'gap', 'padding', 'align'])
-    expect(common.map((p) => p.key)).toEqual(['enabled', 'visible', 'background'])
+    expect(common.map((p) => p.key)).toEqual(['enabled', 'visible', 'background', 'tooltip'])
   })
 
   it('getProp cai no padrão do schema quando o arquivo não grava o valor', () => {

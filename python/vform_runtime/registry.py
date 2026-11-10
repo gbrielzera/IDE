@@ -50,3 +50,19 @@ def list_props(comp_type: str) -> frozenset[str]:
     keys = {p["key"] for p in spec["props"] if p["type"] == "items"}
     keys.update(k for k, v in spec.get("runtimeProps", {}).items() if isinstance(v, list))
     return frozenset(keys)
+
+
+def defaults(comp_type: str) -> dict[str, Any]:
+    """Valores padrão das propriedades de um tipo (as do componente, as comuns que ele aceita e as de execução)."""
+    spec = SPECS.get(comp_type)
+    if spec is None:
+        return {}
+    out: dict[str, Any] = {}
+    for key in spec["common"]:
+        common = DATA["commonProps"].get(key)
+        if common is not None:
+            out[key] = common["default"]
+    for p in spec["props"]:
+        out[p["key"]] = p["default"]
+    out.update(spec.get("runtimeProps", {}))
+    return json.loads(json.dumps(out))  # cópia profunda: listas padrão nunca são compartilhadas

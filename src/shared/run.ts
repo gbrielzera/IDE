@@ -75,7 +75,7 @@ export interface RunChange {
 }
 
 /** Do Python para a janela de execução. */
-export type RunFromPython = { type: 'patch'; changes: RunChange[] }
+export type RunFromPython = { type: 'patch'; changes: RunChange[] } | { type: 'command'; id: string; name: 'focus' | 'blur' }
 
 export interface RunApi {
   // --- usadas pela IDE ---
