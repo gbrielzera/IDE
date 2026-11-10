@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { allPropDefs, CATALOG, CATALOG_BY_TYPE } from '../components/catalog'
-import { COMPONENT_HELP, TERMS, type Topic } from '../core/glossary'
+import { ATALHOS, COMPONENT_HELP, GUIDES, TERMS, type Topic } from '../core/glossary'
 import { EVENTS, membersOf } from '../core/pyapi'
 import { useIde } from '../store'
 import { ComponentPreview } from './ComponentPreview'
 
 function topicKey(t: Topic): string {
-  return t.kind === 'component' ? `c:${t.type}` : `t:${t.index}`
+  return t.kind === 'component' ? `c:${t.type}` : t.kind === 'guide' ? `g:${t.id}` : `t:${t.index}`
 }
 
 /** Dicionário de componentes e termos, em linguagem simples (Ajuda → Dicionário, ou F1). */
@@ -40,6 +40,14 @@ export function Dictionary(): React.JSX.Element | null {
         </div>
         <div className="dict-body">
           <ul className="dict-index">
+            <li className="dict-group">Guias</li>
+            {GUIDES.map((g) => (
+              <li key={g.id}>
+                <button className={topicKey({ kind: 'guide', id: g.id }) === current ? 'on' : ''} onClick={() => open({ kind: 'guide', id: g.id })}>
+                  {g.titulo}
+                </button>
+              </li>
+            ))}
             <li className="dict-group">Componentes</li>
             {CATALOG.map((c) => (
               <li key={c.type}>
@@ -61,7 +69,13 @@ export function Dictionary(): React.JSX.Element | null {
             ))}
           </ul>
           <div className="dict-page" data-testid="dictionary-page">
-            {topic.kind === 'component' ? <ComponentPage type={topic.type} /> : <TermPage index={topic.index} />}
+            {topic.kind === 'component' ? (
+              <ComponentPage type={topic.type} />
+            ) : topic.kind === 'guide' ? (
+              <GuidePage id={topic.id} />
+            ) : (
+              <TermPage index={topic.index} />
+            )}
           </div>
         </div>
       </div>
@@ -71,6 +85,39 @@ export function Dictionary(): React.JSX.Element | null {
 
 function Code({ children }: { children: string }): React.JSX.Element {
   return <pre className="dict-code">{children}</pre>
+}
+
+function GuidePage({ id }: { id: string }): React.JSX.Element {
+  const guide = GUIDES.find((g) => g.id === id)
+  if (!guide) return <p>Guia não encontrado.</p>
+  return (
+    <>
+      <h3>{guide.titulo}</h3>
+      {id === 'primeiros-passos' && (
+        <>
+          <p className="muted">Atalhos do teclado:</p>
+          <ul className="dict-list">
+            {ATALHOS.map((a) => (
+              <li key={a.teclas}>
+                <b>{a.teclas}</b> — {a.acao}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {guide.blocos.map((b, i) =>
+        b.tipo === 'code' ? (
+          <Code key={i}>{b.texto}</Code>
+        ) : b.tipo === 'li' ? (
+          <ul key={i} className="dict-list">
+            <li>{b.texto}</li>
+          </ul>
+        ) : (
+          <p key={i}>{b.texto}</p>
+        )
+      )}
+    </>
+  )
 }
 
 function TermPage({ index }: { index: number }): React.JSX.Element {

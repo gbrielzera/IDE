@@ -105,7 +105,7 @@ describe('autocompletar (completionsFor)', () => {
   })
 
   it('app. lista título, mensagem e fechar', () => {
-    expect(completionsFor('app.', doc)!.map((i) => i.name)).toEqual(['title', 'show_message', 'close'])
+    expect(completionsFor('app.', doc)!.map((i) => i.name)).toEqual(['title', 'show_message', 'open_form', 'close'])
   })
 
   it('fora desses contextos não sugere nada (e não confunde com outros nomes)', () => {
@@ -137,7 +137,7 @@ describe('verificação do script (lintScript)', () => {
   it('app.<membro> inexistente', () => {
     const [d] = lintScript('app.titulo = "x"', doc)
     expect(d).toMatchObject({ line: 1, startColumn: 5, endColumn: 11 })
-    expect(d.message).toContain('title, show_message, close')
+    expect(d.message).toContain('title, show_message, open_form, close')
   })
 
   it('código correto não gera avisos (inclui decoradores, on_load e atalhos)', () => {

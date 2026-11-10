@@ -64,8 +64,11 @@ export type SaveResult = { ok: true } | { ok: false; error: string }
 export interface VformApi {
   newProject(): Promise<ProjectResult>
   openProject(): Promise<ProjectResult>
-  saveProject(files: Record<string, string>): Promise<SaveResult>
+  /** Grava os arquivos; `discard` lista arquivos de telas removidas, que são renomeados para `.removido` (nunca apagados). */
+  saveProject(files: Record<string, string>, discard?: string[]): Promise<SaveResult>
   run: RunApi
+  /** Abre o manual (VForm.chm) no leitor de ajuda do Windows. */
+  help: { openManual(): Promise<{ ok: true; path: string } | { ok: false; error: string }> }
   settings: SettingsApi
 }
 

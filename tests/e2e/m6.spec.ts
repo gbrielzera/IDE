@@ -83,6 +83,9 @@ test('abrir o código pela 1ª vez é rápido (o editor é carregado em segundo 
 })
 
 test.describe('pré-visualização ao vivo ao lado da IDE', () => {
+  // As janelas precisam aparecer na tela de verdade para checar o encaixe: só rodam com VFORM_SHOW_WINDOWS=1
+  // (os testes normais ficam fora da tela para não atrapalhar quem está usando o computador).
+  test.skip(!process.env.VFORM_SHOW_WINDOWS, 'janelas visíveis: rode com VFORM_SHOW_WINDOWS=1')
   interface Geo {
     ide: { x: number; y: number; width: number; height: number }
     run: { x: number; y: number; width: number; height: number } | null

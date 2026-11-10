@@ -1,3 +1,5 @@
+import { registerHelpIpc } from './help'
+import { showUnlessHidden, WEB_THROTTLING } from './testMode'
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { forgetWindow, registerProjectIpc } from './projectFs'
@@ -18,12 +20,13 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      backgroundThrottling: WEB_THROTTLING
     }
   })
   const id = win.id
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => showUnlessHidden(win))
   win.on('closed', () => forgetWindow(id))
 
   // Links externos abrem no navegador do sistema, nunca dentro da IDE.
@@ -40,6 +43,7 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   registerProjectIpc()
   registerRunIpc()
+  registerHelpIpc()
   registerSettingsIpc()
   createWindow()
   app.on('activate', () => {

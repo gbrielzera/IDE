@@ -1438,3 +1438,51 @@ body:has(.fatal-error) {
   margin: 0;
   padding-left: 18px;
 }
+/* ---------- Edição de texto no canvas e menu do botão direito ---------- */
+.text-edit {
+  position: fixed;
+  z-index: 70;
+  box-sizing: border-box;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+  color: #25251f;
+  border: 2px solid var(--accent-dark);
+  outline: none;
+}
+.context-menu {
+  position: fixed;
+  z-index: 90;
+  min-width: 230px;
+}
+
+/* ---------- Telas: janelas de criar/remover ---------- */
+.mini-dialog {
+  width: min(420px, 90vw);
+  padding: 10px 14px;
+  background: var(--face);
+  color: var(--text);
+  border: 1px solid var(--dkshadow);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+}
+.mini-dialog h3 {
+  margin: 0 0 6px;
+}
+.mini-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+.field-error {
+  color: var(--error);
+  margin: 6px 0 0;
+}
+.tab-add {
+  margin-left: 6px;
+}

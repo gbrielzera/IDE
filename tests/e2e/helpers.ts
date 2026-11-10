@@ -17,7 +17,7 @@ export async function launchApp(
   existingProfile?: string
 ): Promise<{ app: ElectronApplication; profile: string; cleanup: () => Promise<void> }> {
   const profile = existingProfile ?? (await mkdtemp(join(tmpdir(), 'vform-profile-')))
-  const app = await electron.launch({ args: [MAIN, `--user-data-dir=${profile}`], env: { ...process.env, ...env } as Record<string, string> })
+  const app = await electron.launch({ args: [MAIN, `--user-data-dir=${profile}`], env: { ...process.env, VFORM_HIDE_WINDOWS: process.env.VFORM_SHOW_WINDOWS ? '' : '1', ...env } as Record<string, string> })
   return {
     app,
     profile,

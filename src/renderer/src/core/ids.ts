@@ -22,6 +22,14 @@ export function idProblem(id: string): string | null {
   return null
 }
 
+/** Nome de tela (vira o nome dos arquivos e o argumento de `app.open_form`): identificador livre, sem repetir. */
+export function formNameProblem(name: string, existing: readonly string[]): string | null {
+  const base = idProblem(name)
+  if (base) return base.replace('O ID', 'O nome')
+  if (existing.some((n) => n.toLowerCase() === name.toLowerCase())) return `Já existe uma tela chamada "${name}".`
+  return null
+}
+
 export function isValidId(id: string): boolean {
   return idProblem(id) === null
 }

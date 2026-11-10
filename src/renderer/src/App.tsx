@@ -8,7 +8,10 @@ import { OutlineTree } from './editor/OutlineTree'
 import { CanvasArea, preloadAndWarmCodeEditor } from './editor/CanvasArea'
 import { PropertyPanel } from './editor/PropertyPanel'
 import { ConsolePanel } from './editor/ConsolePanel'
+import { ContextMenu } from './editor/ContextMenu'
+import { FormDialogs } from './editor/FormDialogs'
 import { Dictionary } from './editor/Dictionary'
+import { TextEditOverlay } from './editor/TextEditOverlay'
 import { StatusBar } from './editor/StatusBar'
 import { Welcome } from './editor/Welcome'
 
@@ -33,6 +36,12 @@ function useShortcuts(): void {
       if (e.key === 'F1') {
         e.preventDefault()
         ide.dictionary ? ide.closeDictionary() : ide.openDictionary()
+        return
+      }
+      if (e.key === 'F2') {
+        if (isTyping(e.target)) return
+        e.preventDefault()
+        ide.startTextEdit()
         return
       }
       if (e.key === 'F5') {
@@ -208,6 +217,9 @@ export function App(): React.JSX.Element {
       </div>
       <StatusBar />
       <Dictionary />
+      <ContextMenu />
+      <FormDialogs />
+      <TextEditOverlay />
     </div>
   )
 }

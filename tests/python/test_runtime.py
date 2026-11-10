@@ -111,6 +111,16 @@ class LoadTest(unittest.TestCase):
         h.load("form.lblInfo.text = app.title")
         self.assertEqual(h.of("patch")[0]["changes"], [{"id": "lblInfo", "prop": "text", "value": "Principal"}])
 
+    def test_app_open_form_envia_navigate_depois_de_enviar_o_que_ja_mudou(self) -> None:
+        h = Harness()
+        h.load('''
+            form.lblInfo.text = "saindo"
+            app.open_form("Tela2")
+        ''')
+        kinds = [m["type"] for m in h.sent]
+        self.assertLess(kinds.index("patch"), kinds.index("navigate"))  # o que o script já alterou chega antes
+        self.assertEqual(h.of("navigate"), [{"type": "navigate", "form": "Tela2"}])
+
 
 class EventsTest(unittest.TestCase):
     def test_click_chama_handler_com_ou_sem_argumento(self) -> None:

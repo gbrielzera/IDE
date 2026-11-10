@@ -9,3 +9,4 @@ playwright-report/
 .claude/
 *.tsbuildinfo
 projetos_teste/
+out-tools/

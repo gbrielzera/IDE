@@ -83,6 +83,11 @@ class App:
         self._runtime.flush()  # o que o script já alterou aparece antes da caixa
         self._runtime.send({"type": "message", "text": str(text), "title": title or self._title})
 
+    def open_form(self, name: Any) -> None:
+        """Abre outra tela do projeto nesta janela (a atual é fechada). Ex.: app.open_form("Principal")."""
+        self._runtime.flush()
+        self._runtime.send({"type": "navigate", "form": str(name)})
+
     def close(self) -> None:
         """Fecha a janela de execução."""
         self._runtime.flush()
@@ -90,5 +95,5 @@ class App:
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name != "title":
-            raise AttributeError(f"'app.{name}' não existe. Disponíveis: title, show_message(), close()")
+            raise AttributeError(f"'app.{name}' não existe. Disponíveis: title, show_message(), open_form(), close()")
         App.title.fset(self, value)  # type: ignore[attr-defined]

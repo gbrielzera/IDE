@@ -11,7 +11,8 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 const api: VformApi = {
   newProject: () => ipcRenderer.invoke('project:new'),
   openProject: () => ipcRenderer.invoke('project:open'),
-  saveProject: (files) => ipcRenderer.invoke('project:save', files),
+  saveProject: (files, discard) => ipcRenderer.invoke('project:save', files, discard),
+  help: { openManual: () => ipcRenderer.invoke('help:manual') },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch)

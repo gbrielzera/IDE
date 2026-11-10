@@ -57,6 +57,9 @@ export function CanvasArea(): React.JSX.Element {
             )}
           </button>
         ])}
+        <button className="tab tab-add" data-testid="add-form" title="Nova tela" onClick={() => useIde.getState().openFormDialog({ kind: 'new' })}>
+          + tela
+        </button>
       </nav>
       {view === 'code' && active ? (
         <ErrorBoundary

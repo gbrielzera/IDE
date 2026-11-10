@@ -116,6 +116,7 @@ export function membersOf(type: string): Member[] {
 export const APP_MEMBERS: Member[] = [
   { name: 'title', kind: 'property', detail: 'texto', doc: 'Título da janela.' },
   { name: 'show_message', kind: 'method', detail: 'show_message(texto, título="")', doc: 'Mostra uma caixa de mensagem.', insert: 'show_message($0)' },
+  { name: 'open_form', kind: 'method', detail: 'open_form("Tela")', doc: 'Abre outra tela do projeto nesta janela.', insert: 'open_form("$0")' },
   { name: 'close', kind: 'method', detail: 'close()', doc: 'Fecha a janela de execução.', insert: 'close()' }
 ]
 

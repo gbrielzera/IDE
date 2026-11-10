@@ -1,8 +1,10 @@
+import { showUnlessHidden, WEB_THROTTLING } from './testMode'
 import { app, BrowserWindow, dialog, ipcMain, screen, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle } from 'electron'
 import { existsSync, promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { FormDocument } from '@shared/project'
 import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded, type RunInit, type RunPayload, type RunStartResult, type RunToPython } from '@shared/run'
+import type { RunScreen } from '@shared/run'
 import { getProjectDir, insideProject } from './projectFs'
 import { findPython, PythonHost, type PyMessage, type PythonCommand } from './pythonHost'
 
@@ -16,10 +18,21 @@ interface Run {
   init: RunInit
   scriptPath: string
   script: string
+  /** Telas do projeto por nome (para `app.open_form`), com o script já lido. */
+  screens: Map<string, Screen>
+  python: PythonCommand
+  runtime: string
+  dir: string
   loaded: boolean
   ended: boolean
   /** Quem pediu o fim: a IDE (Parar) ou quem fechou a janela de execução. */
   stopping: boolean
+}
+
+interface Screen {
+  init: RunInit
+  scriptPath: string
+  script: string
 }
 
 /** Execuções por webContents da janela de execução, e por janela da IDE (uma de cada vez). */
@@ -169,9 +182,56 @@ function onPythonMessage(run: Run, msg: PyMessage): void {
     case 'close':
       if (!run.win.isDestroyed()) run.win.close()
       break
+    case 'navigate':
+      if (typeof msg.form === 'string' && !run.win.isDestroyed()) navigate(run, msg.form)
+      break
     default:
       break // loaded, pong...
   }
+}
+
+/** Lê o script de cada tela (o do editor, se houver; senão o do disco) para a navegação por `app.open_form`. */
+async function loadScreens(dir: string, screens: RunScreen[] | undefined): Promise<Map<string, Screen>> {
+  const out = new Map<string, Screen>()
+  for (const s of screens ?? []) {
+    if (typeof s?.formName !== 'string' || typeof s.scriptPath !== 'string' || !s.doc || typeof s.components !== 'object') continue
+    let script = ''
+    try {
+      script = typeof s.script === 'string' ? s.script : await fs.readFile(insideProject(dir, s.scriptPath), 'utf8')
+    } catch {
+      // Sem script: a tela abre só com o layout.
+    }
+    out.set(s.formName, { init: { doc: s.doc, components: s.components }, scriptPath: s.scriptPath, script })
+  }
+  return out
+}
+
+/** Troca a tela exibida: reinicia só o Python (script novo), ajusta o tamanho/título da janela e recarrega o layout. */
+function swapScreen(run: Run, init: RunInit, scriptPath: string, script: string, fallbackTitle: string): void {
+  const previous = run.init.doc
+  const oldHost = run.host
+  run.init = init
+  run.scriptPath = scriptPath
+  run.script = script
+  run.loaded = false
+  attachHost(run, run.python, run.runtime, run.dir).start()
+  oldHost.stop()
+  const { doc } = init
+  if (previous.width !== doc.width || previous.height !== doc.height)
+    run.win.setContentSize(Math.min(Math.max(Math.round(doc.width), 200), 2400), Math.min(Math.max(Math.round(doc.height), 120), 1600))
+  run.win.setTitle(doc.title || fallbackTitle)
+  run.win.webContents.send('run:reload')
+}
+
+function navigate(run: Run, name: string): void {
+  const target = run.screens.get(name)
+  if (!target) {
+    const known = [...run.screens.keys()].join(', ')
+    ideConsole(run, { level: 'error', text: `app.open_form: a tela "${name}" não existe. Telas do projeto: ${known || '(nenhuma)'}.` })
+    return
+  }
+  ideConsole(run, { level: 'info', text: `Abrindo a tela "${name}".` })
+  swapScreen(run, target.init, target.scriptPath, target.script, name)
 }
 
 async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartResult> {
@@ -211,18 +271,9 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
 
   if (reuse && existing) {
     // Pré-visualização ao vivo: a janela fica (posição e tamanho dela) e só o Python é trocado.
-    const previous = existing.init.doc
-    const oldHost = existing.host
-    existing.init = { doc, components: payload.components }
-    existing.scriptPath = payload.scriptPath
-    existing.script = script
-    existing.loaded = false
-    attachHost(existing, python, runtime, dir).start()
-    oldHost.stop()
-    if (previous.width !== doc.width || previous.height !== doc.height)
-      existing.win.setContentSize(Math.min(Math.max(Math.round(doc.width), 200), 2400), Math.min(Math.max(Math.round(doc.height), 120), 1600))
-    existing.win.setTitle(doc.title || payload.formName)
-    existing.win.webContents.send('run:reload')
+    existing.screens = await loadScreens(dir, payload.screens)
+    existing.python = python
+    swapScreen(existing, { doc, components: payload.components }, payload.scriptPath, script, payload.formName)
     return { ok: true, runId: existing.id }
   }
 
@@ -240,7 +291,8 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      backgroundThrottling: WEB_THROTTLING
     }
   })
   win.setMenuBarVisibility(false)
@@ -254,6 +306,10 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
     init: { doc, components: payload.components },
     scriptPath: payload.scriptPath,
     script,
+    screens: await loadScreens(dir, payload.screens),
+    python,
+    runtime,
+    dir,
     loaded: false,
     ended: false,
     stopping: false,
@@ -263,7 +319,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
 
   byRunWindow.set(run.winContentsId, run)
   byIde.set(ide.id, run)
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => showUnlessHidden(win))
   win.on('closed', () => endRun(run, run.stopping ? 'stopped' : 'closed'))
   ide.once('closed', () => stopRunFor(ide.id))
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

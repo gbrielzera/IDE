@@ -39,6 +39,8 @@ export function MenuBar(): React.JSX.Element {
     const t = s.activeForm ? s.tracked[s.activeForm] : undefined
     return t ? canDistribute(t.doc, s.selection) : false
   })
+  const formCount = useIde((s) => s.project?.manifest.forms.length ?? 0)
+  const activeForm = useIde((s) => s.activeForm)
   const ide = useIde.getState()
 
   // Fecha o menu ao clicar fora ou apertar Esc.
@@ -69,6 +71,13 @@ export function MenuBar(): React.JSX.Element {
         { label: 'Novo projeto...', shortcut: 'Ctrl+N', disabled: busy, onClick: () => void ide.newProject() },
         { label: 'Abrir projeto...', shortcut: 'Ctrl+O', disabled: busy, onClick: () => void ide.openProject() },
         { label: 'Salvar', shortcut: 'Ctrl+S', disabled: busy || !hasProject, onClick: () => void ide.saveProject() },
+        { label: '', separator: true },
+        { label: 'Nova tela...', disabled: !hasProject, onClick: () => ide.openFormDialog({ kind: 'new' }) },
+        {
+          label: 'Remover tela atual...',
+          disabled: !hasProject || formCount <= 1 || !activeForm,
+          onClick: () => activeForm && ide.openFormDialog({ kind: 'remove', name: activeForm })
+        },
         { label: '', separator: true },
         {
           label: `${autosave ? '✓ ' : '    '}Salvar automaticamente`,
@@ -132,7 +141,10 @@ export function MenuBar(): React.JSX.Element {
     },
     {
       label: 'Ajuda',
-      items: [{ label: 'Dicionário de componentes', shortcut: 'F1', onClick: () => ide.openDictionary() }]
+      items: [
+        { label: 'Dicionário de componentes', shortcut: 'F1', onClick: () => ide.openDictionary() },
+        { label: 'Manual do usuário (.chm)', onClick: () => void ide.openManual() }
+      ]
     }
   ]
 

@@ -27,6 +27,7 @@ handler já enxergar o valor novo em `form.txt.value`.
 | `console` | `level` (`info`/`warn`/`error`), `text`, `line?`, `file?` | Saída do `print()` (info), erros do script (error, com a linha do arquivo do usuário). |
 | `message` | `text`, `title` | `app.show_message(...)`: a IDE mostra uma caixa de mensagem. |
 | `close` | — | `app.close()`: a IDE fecha a janela de execução. |
+| `navigate` | `form` | `app.open_form("Nome")`: a IDE troca a tela exibida (novo processo Python com o script da tela de destino; erro no console se o nome não existir). |
 | `loaded` | `ok` | O `load_form` terminou (`ok` é falso se o script ou algum `on_load` falhou). |
 | `pong` | — | Resposta ao `ping`. |
 
@@ -51,7 +52,7 @@ def inicio(): ...
 @form.btnOk.on_click          # ou btnOk.on("click", fn); o handler pode receber (ev)
 def ok(ev): ...
 
-app.title = "Meu app"; app.show_message("Pronto"); app.close()
+app.title = "Meu app"; app.show_message("Pronto"); app.open_form("Tela2"); app.close()
 ```
 
 Erros do script (inclusive de sintaxe) viram `console` com `level: "error"` e a linha; o runtime continua

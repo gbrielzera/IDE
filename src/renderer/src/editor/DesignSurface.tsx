@@ -142,6 +142,11 @@ function NodeView({ node, parent, selected, showHandles, onNodeDown, onHandleDow
       data-container={container ? 'true' : undefined}
       style={style}
       onPointerDown={(e) => onNodeDown(e, node)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        useIde.getState().openContextMenu(e.clientX, e.clientY, node.id)
+      }}
     >
       <div className="node-content" style={appearanceStyle(node)}>
         {renderContent(node)}
@@ -648,6 +653,10 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         style={{ width: doc.width, height: doc.height }}
         onPointerDown={onSurfaceDown}
         onDragStart={(e) => e.preventDefault()}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          useIde.getState().openContextMenu(e.clientX, e.clientY, null)
+        }}
         onDoubleClick={(e) => e.target === e.currentTarget && useIde.getState().openHandler(null)}
         onDragOver={onPaletteDragOver}
         onDrop={onDrop}

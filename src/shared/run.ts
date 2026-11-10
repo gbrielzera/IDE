@@ -7,6 +7,16 @@ export interface RunComponent {
   props: Record<string, unknown>
 }
 
+/** Uma tela do projeto, para `app.open_form("Nome")` poder abri-la durante a execução. */
+export interface RunScreen {
+  formName: string
+  scriptPath: string
+  /** Texto ainda não salvo do editor; se ausente, o main lê o arquivo do disco. */
+  script?: string
+  doc: FormDocument
+  components: Record<string, RunComponent>
+}
+
 export interface RunPayload {
   formName: string
   /** Caminho do script, relativo à pasta do projeto. */
@@ -25,6 +35,8 @@ export interface RunPayload {
   dock?: boolean
   doc: FormDocument
   components: Record<string, RunComponent>
+  /** Todas as telas do projeto (inclusive esta), para a navegação pelo código. */
+  screens?: RunScreen[]
 }
 
 export interface RunInit {

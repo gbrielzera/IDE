@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
+import { newFormDocument, newFormScript, PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
 import { alignNodes, canAlign, canDistribute, distributeNodes, type AlignMode, type Axis } from './core/align'
 import { clampRect, contentSize } from './core/bounds'
 import { CATALOG, CATALOG_BY_TYPE } from './components/catalog'
@@ -25,7 +25,7 @@ import {
   type Tracked
 } from './core/history'
 import { allIds, locate, topmost } from './core/tree'
-import { idProblem } from './core/ids'
+import { formNameProblem, idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
 import { isAutoLayout, layoutOf } from './core/props'
 import type { FormNode } from '@shared/project'
@@ -33,6 +33,7 @@ import { buildRunComponents } from './core/runstate'
 import { renameInScript } from './core/refactor'
 import { ensureHandler, eventForDoubleClick } from './core/script'
 import type { Topic } from './core/glossary'
+import { textKeyOf } from './core/textEdit'
 import { typeOfId } from './core/pyapi'
 import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded } from '@shared/run'
 import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
@@ -124,6 +125,15 @@ interface IdeState {
   /** `silent`: salvamento automático (não polui o console a cada alteração). */
   saveProject(opts?: { silent?: boolean }): Promise<void>
   setActiveForm(name: string): void
+  /** Telas (formulários) do projeto: criar, remover e as janelas de confirmação. */
+  formDialog: { kind: 'new' } | { kind: 'remove'; name: string } | null
+  openFormDialog(dialog: { kind: 'new' } | { kind: 'remove'; name: string }): void
+  closeFormDialog(): void
+  /** Cria uma tela vazia e a abre; devolve a mensagem do problema (nome inválido/repetido) ou null. */
+  addForm(name: string): string | null
+  removeForm(name: string): void
+  /** Arquivos de telas removidas que serão renomeados ao salvar. */
+  removedFiles: string[]
   openTab(form: string, view: View): void
   log(level: LogLevel, text: string, meta?: { line?: number; file?: string }): void
   clearConsole(): void
@@ -132,6 +142,16 @@ interface IdeState {
   dictionary: Topic | null
   openDictionary(topic?: Topic): void
   closeDictionary(): void
+  /** Abre o manual (.chm); avisa no console se não der. */
+  openManual(): Promise<void>
+  /** Componente cujo texto está sendo editado no canvas (F2 / menu do botão direito), ou null. */
+  editingText: string | null
+  startTextEdit(id?: string): void
+  stopTextEdit(): void
+  /** Menu do botão direito aberto (posição na tela e componente sob o cursor, se houver). */
+  contextMenu: { x: number; y: number; id: string | null } | null
+  openContextMenu(x: number, y: number, id: string | null): void
+  closeContextMenu(): void
 
   currentDoc(): FormDocument | null
   select(ids: string[]): void
@@ -226,6 +246,8 @@ export const useIde = create<IdeState>((set, get) => {
           ),
           runErrors: {},
           formPos: {},
+          removedFiles: [],
+          formDialog: null,
           reveal: null,
           activeView: 'design',
           selection: [],
@@ -319,9 +341,9 @@ export const useIde = create<IdeState>((set, get) => {
           if (t) files[form.layout] = serializeForm(t.doc)
           if (scriptDirty[form.name]) files[form.script] = scripts[form.name] ?? ''
         }
-        const res = await window.vform.saveProject(files)
+        const res = await window.vform.saveProject(files, get().removedFiles)
         if (res.ok) {
-          set({ project: { ...project, files: { ...project.files, ...files } }, scriptDirty: {}, dirty: false })
+          set({ project: { ...get().project!, files: { ...get().project!.files, ...files } }, scriptDirty: {}, removedFiles: [], dirty: false })
           if (!opts?.silent) get().log('info', 'Projeto salvo.')
         } else {
           get().log('error', `Falha ao salvar: ${res.error}`)
@@ -332,6 +354,78 @@ export const useIde = create<IdeState>((set, get) => {
     },
 
     setActiveForm: (name) => set({ activeForm: name, selection: [] }),
+
+    formDialog: null,
+    removedFiles: [],
+    openFormDialog: (formDialog) => set({ formDialog }),
+    closeFormDialog: () => set({ formDialog: null }),
+
+    addForm(rawName) {
+      const { project } = get()
+      if (!project) return 'Nenhum projeto aberto.'
+      const name = rawName.trim()
+      const problem = formNameProblem(name, project.manifest.forms.map((f) => f.name))
+      if (problem) return problem
+      const ref = { name, layout: `${name}.form.json`, script: `${name}.py` }
+      const manifest = { ...project.manifest, forms: [...project.manifest.forms, ref] }
+      const doc = newFormDocument(name)
+      const script = newFormScript(name)
+      set((s) => ({
+        project: {
+          ...project,
+          manifest,
+          files: {
+            ...project.files,
+            [PROJECT_FILE]: JSON.stringify(manifest, null, 2) + '\n',
+            [ref.layout]: serializeForm(doc),
+            [ref.script]: script
+          }
+        },
+        tracked: { ...s.tracked, [name]: createTracked(doc) },
+        scripts: { ...s.scripts, [name]: script },
+        scriptDirty: { ...s.scriptDirty, [name]: true }, // o script novo precisa ser gravado
+        scriptSync: { ...s.scriptSync, [name]: (s.scriptSync[name] ?? 0) + 1 },
+        removedFiles: s.removedFiles.filter((f) => f !== ref.layout && f !== ref.script),
+        activeForm: name,
+        activeView: 'design',
+        selection: [],
+        formDialog: null,
+        dirty: true
+      }))
+      get().log('info', `Tela "${name}" criada (${ref.layout} e ${ref.script}).`)
+      return null
+    },
+
+    removeForm(name) {
+      const { project, activeForm } = get()
+      if (!project || project.manifest.forms.length <= 1) return
+      const ref = project.manifest.forms.find((f) => f.name === name)
+      if (!ref) return
+      const forms = project.manifest.forms.filter((f) => f.name !== name)
+      const manifest = { ...project.manifest, forms }
+      const without = <T,>(m: Record<string, T>): Record<string, T> => {
+        const next = { ...m }
+        delete next[name]
+        return next
+      }
+      const files: Record<string, string> = { ...project.files, [PROJECT_FILE]: JSON.stringify(manifest, null, 2) + '\n' }
+      delete files[ref.layout]
+      delete files[ref.script]
+      set((s) => ({
+        project: { ...project, manifest, files },
+        tracked: without(s.tracked),
+        scripts: without(s.scripts),
+        scriptDirty: without(s.scriptDirty),
+        formPos: without(s.formPos),
+        removedFiles: [...s.removedFiles, ref.layout, ref.script],
+        activeForm: activeForm === name ? forms[0].name : activeForm,
+        activeView: activeForm === name ? 'design' : s.activeView,
+        selection: activeForm === name ? [] : s.selection,
+        formDialog: null,
+        dirty: true
+      }))
+      get().log('info', `Tela "${name}" removida do projeto. Os arquivos ficam na pasta como ${ref.layout}.removido e ${ref.script}.removido (ao salvar).`)
+    },
 
     setFormPos: (form, pos) =>
       set((s) => {
@@ -368,6 +462,28 @@ export const useIde = create<IdeState>((set, get) => {
       set({ dictionary: { kind: 'component', type: first ?? CATALOG[0].type } })
     },
     closeDictionary: () => set({ dictionary: null }),
+    async openManual() {
+      const res = await window.vform.help.openManual()
+      if (res.ok) get().log('info', `Manual aberto (${res.path}).`)
+      else get().log('error', `Não foi possível abrir o manual: ${res.error}`)
+    },
+
+    editingText: null,
+    startTextEdit(id) {
+      const doc = get().currentDoc()
+      const target = id ?? (get().selection.length === 1 ? get().selection[0] : null)
+      const node = doc && target ? locate(doc, target)?.node : null
+      if (!node || !textKeyOf(node.type)) return
+      set({ editingText: node.id, selection: [node.id], contextMenu: null })
+    },
+    stopTextEdit: () => set({ editingText: null }),
+
+    contextMenu: null,
+    openContextMenu(x, y, id) {
+      if (id && !get().selection.includes(id)) set({ selection: [id] })
+      set({ contextMenu: { x, y, id }, editingText: null })
+    },
+    closeContextMenu: () => set({ contextMenu: null }),
 
     currentDoc() {
       const { activeForm, tracked } = get()
@@ -472,7 +588,20 @@ export const useIde = create<IdeState>((set, get) => {
         // Texto alterado no editor e ainda não salvo vale; senão o main lê o arquivo do disco (edição externa).
         script: get().scriptDirty[form.name] ? get().scripts[form.name] : undefined,
         doc: t.doc,
-        components: buildRunComponents(t.doc)
+        components: buildRunComponents(t.doc),
+        screens: project.manifest.forms.flatMap((f) => {
+          const ft = tracked[f.name]
+          if (!ft) return []
+          return [
+            {
+              formName: f.name,
+              scriptPath: f.script,
+              script: get().scriptDirty[f.name] ? get().scripts[f.name] : undefined,
+              doc: ft.doc,
+              components: buildRunComponents(ft.doc)
+            }
+          ]
+        })
       })
       if (res.ok) set({ running: true, runId: res.runId, runForm: form.name })
       else {

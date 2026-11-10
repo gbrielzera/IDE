@@ -147,7 +147,7 @@ async function openProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   }
 }
 
-async function saveProject(e: IpcMainInvokeEvent, files: unknown): Promise<SaveResult> {
+async function saveProject(e: IpcMainInvokeEvent, files: unknown, discard?: unknown): Promise<SaveResult> {
   const win = BrowserWindow.fromWebContents(e.sender)
   const dir = win ? openDirs.get(win.id) : undefined
   if (!dir) return { ok: false, error: 'Nenhum projeto aberto.' }
@@ -160,7 +160,21 @@ async function saveProject(e: IpcMainInvokeEvent, files: unknown): Promise<SaveR
       if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
       writes.push([insideProject(dir, rel), content])
     }
+    // Telas removidas: os arquivos não são apagados, só renomeados (dá para recuperar tirando o ".removido").
+    const renames: [string, string][] = []
+    if (discard !== undefined) {
+      if (!Array.isArray(discard) || discard.some((r) => typeof r !== 'string')) throw new Error('Lista de remoção inválida.')
+      for (const rel of discard as string[]) {
+        if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
+        const from = insideProject(dir, rel)
+        if (await exists(from)) renames.push([from, `${from}.removido`])
+      }
+    }
     for (const [full, content] of writes) await writeFileSafely(full, content)
+    for (const [from, to] of renames) {
+      await fs.rm(to, { force: true })
+      await fs.rename(from, to)
+    }
     return { ok: true }
   } catch (err) {
     return { ok: false, error: errorMessage(err) }
