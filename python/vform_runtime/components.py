@@ -12,27 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from .runtime import Runtime
 
-# Eventos que cada tipo de componente emite (nome usado em @form.x.on_<evento>).
-EVENTS: dict[str, tuple[str, ...]] = {
-    "Label": ("click",),
-    "Button": ("click",),
-    "Image": ("click",),
-    "Panel": ("click",),
-    "TextField": ("change",),
-    "TextArea": ("change",),
-    "CheckBox": ("change",),
-    "RadioGroup": ("change",),
-    "ComboBox": ("change",),
-    "ListBox": ("change", "double_click"),
-    "Tabs": ("change",),
-    "Table": ("change",),
-}
-
-# Tipos cujo `text` é, na verdade, o `value` (TextField.text é um apelido amigável).
-TEXT_ALIAS = {"TextField", "TextArea"}
-
-# Propriedades que são listas: viram TrackedList, para `form.cb.items.append(...)` funcionar.
-LIST_PROPS = {"items", "tabs", "columns", "rows"}
+from .registry import ALIASES, EVENTS, METHODS, SELECTED_ITEM, list_props  # noqa: E402  (tabelas vêm do registro)
 
 
 def to_camel(name: str) -> str:
@@ -116,15 +96,15 @@ class Component:
         key = to_camel(name)
         if key in self._props:
             return key
-        if name == "text" and self._type in TEXT_ALIAS and "value" in self._props:
-            return "value"
+        target = ALIASES.get(self._type, {}).get(name)
+        if target is not None and target in self._props:
+            return target
         return None
 
     def _names(self) -> list[str]:
         names = [to_snake(k) for k in self._props]
-        if self._type in TEXT_ALIAS:
-            names.append("text")
-        if "items" in self._props and "selectedIndex" in self._props:
+        names.extend(ALIASES.get(self._type, {}))
+        if self._type in SELECTED_ITEM:
             names.append("selected_item")
         return sorted(set(names))
 
@@ -139,26 +119,26 @@ class Component:
             raise AttributeError(name)
         if name.startswith("on_"):
             return self._registrar(name[3:])
-        if name == "selected_item" and "items" in self._props and "selectedIndex" in self._props:
+        if name == "selected_item" and self._type in SELECTED_ITEM:
             items, index = self._props["items"], self._props["selectedIndex"]
             return items[index] if isinstance(index, int) and 0 <= index < len(items) else None
         key = self._key(name)
         if key is None:
             raise self._unknown(name)
         value = self._props[key]
-        if key in LIST_PROPS and isinstance(value, list):
+        if key in list_props(self._type) and isinstance(value, list):
             return TrackedList(value, lambda new, k=key: self._set(k, new))
         return value
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name == "selected_item" and "items" in self._props and "selectedIndex" in self._props:
+        if name == "selected_item" and self._type in SELECTED_ITEM:
             items = self._props["items"]
             self._set("selectedIndex", items.index(value) if value in items else -1)
             return
         key = self._key(name)
         if key is None:
             raise self._unknown(name)
-        if key in LIST_PROPS and not isinstance(value, list):
+        if key in list_props(self._type) and not isinstance(value, list):
             value = list(value)
         self._set(key, value)
 
@@ -194,6 +174,12 @@ class Component:
         return register(fn) if fn is not None else register
 
     # ----- métodos de listas (ComboBox, ListBox, RadioGroup, Tabs, Table) -----
+    def _require(self, method: str) -> None:
+        """O registro diz quais métodos cada tipo tem: os outros dão um erro claro."""
+        if method not in METHODS.get(self._type, frozenset()):
+            available = ", ".join(sorted(METHODS.get(self._type, frozenset()))) or "(nenhum)"
+            raise AttributeError(f"{self._type} '{self._id}' não tem o método '{method}'. Métodos: {available}")
+
     def _items_key(self) -> str:
         for key in ("items", "tabs", "rows"):
             if key in self._props:
@@ -201,16 +187,17 @@ class Component:
         raise AttributeError(f"{self._type} '{self._id}' não tem lista de itens.")
 
     def add_item(self, item: Any) -> None:
+        self._require("add_item")
         key = self._items_key()
         self._set(key, [*self._props[key], item])
 
     def add_row(self, row: list[Any]) -> None:
-        if "rows" not in self._props:
-            raise AttributeError(f"{self._type} '{self._id}' não tem linhas (só Table).")
+        self._require("add_row")
         self._set("rows", [*self._props["rows"], list(row)])
 
     def remove_item(self, item: Any) -> None:
         """Remove o primeiro item igual a `item` (use `remove_at` para remover por posição)."""
+        self._require("remove_item")
         key = self._items_key()
         items = list(self._props[key])
         if item not in items:
@@ -221,6 +208,7 @@ class Component:
         self._fix_selection(index)
 
     def remove_at(self, index: int) -> None:
+        self._require("remove_at")
         key = self._items_key()
         items = list(self._props[key])
         items.pop(index)  # IndexError natural se fora da faixa
@@ -228,6 +216,7 @@ class Component:
         self._fix_selection(index if index >= 0 else len(items) + 1 + index)
 
     def clear(self) -> None:
+        self._require("clear")
         key = self._items_key()
         self._set(key, [])
         if "selectedIndex" in self._props:

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { newFormDocument, newFormScript, type FormDocument } from '@shared/project'
 import type { RunStartResult, RunConsoleMessage } from '@shared/run'
+import { REGISTRY } from '@shared/registry'
 import { CATALOG } from '@renderer/components/catalog'
 import { addNode, createNode, setProp } from '@renderer/core/commands'
 import { createTracked, mutate } from '@renderer/core/history'
@@ -69,14 +70,8 @@ describe('API Python dos componentes (pyapi)', () => {
     expect(membersOf('Inexistente')).toEqual([])
   })
 
-  it('a tabela de eventos é a mesma do runtime Python (sem divergência)', () => {
-    const py = readFileSync(resolve('python/vform_runtime/components.py'), 'utf8')
-    const block = /\nEVENTS[^=]*=\s*\{([\s\S]*?)\n\}/.exec(py)?.[1] ?? ''
-    const fromPython: Record<string, string[]> = {}
-    for (const m of block.matchAll(/"(\w+)":\s*\(([^)]*)\)/g))
-      fromPython[m[1]] = [...m[2].matchAll(/"(\w+)"/g)].map((x) => x[1])
-    expect(Object.keys(fromPython).length).toBeGreaterThan(5)
-    expect(fromPython).toEqual(EVENTS)
+  it('os eventos da IDE vêm do Component Registry (o mesmo arquivo que o runtime Python lê)', () => {
+    for (const c of REGISTRY.components) expect(EVENTS[c.type]).toEqual(c.events.map((e) => e.name))
   })
 
   it('o evento do duplo clique é o primeiro do tipo (click para botão, change para campo)', () => {

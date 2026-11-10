@@ -7,10 +7,11 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "strict": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "noUnusedLocals": true,
     "paths": { "@shared/*": ["./src/shared/*"] }
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "tools/**/*", "src/renderer/src/core/**/*", "src/renderer/src/components/catalog.ts"]
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "registry/*.json", "tools/**/*", "src/renderer/src/core/**/*", "src/renderer/src/components/catalog.ts"]
 }

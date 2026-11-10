@@ -1,4 +1,4 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { execFile, execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { LineSplitter, MAX_MESSAGE_CHARS } from './protocol'
 
 export interface PythonCommand {
@@ -137,8 +137,14 @@ export class PythonHost {
   kill(): void {
     const proc = this.proc
     if (!proc || proc.pid === undefined) return
-    if (process.platform === 'win32') execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true }, () => undefined)
-    else proc.kill('SIGKILL')
+    if (process.platform === 'win32') {
+      try {
+        // Síncrono de propósito: ao sair da IDE o processo principal não pode terminar antes de o Python morrer.
+        execFileSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, timeout: 5000, stdio: 'ignore' })
+      } catch {
+        proc.kill() // taskkill falhou (o processo já tinha saído, por exemplo)
+      }
+    } else proc.kill('SIGKILL')
   }
 
   /** Pede o encerramento e, se o processo não sair logo (script preso num laço), o mata. */

@@ -1,0 +1,671 @@
+{
+  "$comment": "Fonte ÚNICA dos componentes do VForm. A IDE (catálogo, painel, autocompletar, dicionário, manual) e o runtime Python leem este arquivo. Para criar ou mudar um componente, edite aqui.",
+  "version": 1,
+  "commonProps": {
+    "enabled": {
+      "key": "enabled",
+      "label": "Habilitado",
+      "type": "boolean",
+      "default": true
+    },
+    "visible": {
+      "key": "visible",
+      "label": "Visível",
+      "type": "boolean",
+      "default": true
+    },
+    "fontSize": {
+      "key": "fontSize",
+      "label": "Tamanho da fonte",
+      "type": "number",
+      "default": 12,
+      "min": 6,
+      "max": 72
+    },
+    "bold": {
+      "key": "bold",
+      "label": "Negrito",
+      "type": "boolean",
+      "default": false
+    },
+    "italic": {
+      "key": "italic",
+      "label": "Itálico",
+      "type": "boolean",
+      "default": false
+    },
+    "color": {
+      "key": "color",
+      "label": "Cor do texto",
+      "type": "color",
+      "default": ""
+    },
+    "background": {
+      "key": "background",
+      "label": "Cor de fundo",
+      "type": "color",
+      "default": ""
+    }
+  },
+  "methods": {
+    "add_item": {
+      "detail": "add_item(item)",
+      "doc": "Acrescenta um item ao final.",
+      "insert": "add_item($0)"
+    },
+    "remove_item": {
+      "detail": "remove_item(item)",
+      "doc": "Remove o primeiro item igual a `item`.",
+      "insert": "remove_item($0)"
+    },
+    "remove_at": {
+      "detail": "remove_at(índice)",
+      "doc": "Remove o item da posição `índice`.",
+      "insert": "remove_at($0)"
+    },
+    "clear": {
+      "detail": "clear()",
+      "doc": "Remove todos os itens e limpa a seleção.",
+      "insert": "clear()"
+    },
+    "add_row": {
+      "detail": "add_row(linha)",
+      "doc": "Acrescenta uma linha (lista de valores).",
+      "insert": "add_row($0)"
+    }
+  },
+  "components": [
+    {
+      "type": "Label",
+      "label": "Label",
+      "category": "Exibição",
+      "width": 120,
+      "height": 24,
+      "props": [
+        {
+          "key": "text",
+          "label": "Texto",
+          "type": "string",
+          "default": "Label"
+        },
+        {
+          "key": "align",
+          "label": "Alinhamento",
+          "type": "enum",
+          "default": "left",
+          "options": [
+            "left",
+            "center",
+            "right"
+          ]
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Um texto fixo na tela, que o usuário só lê.",
+        "paraQue": "Títulos, explicações e mensagens de resultado (\"Salvo com sucesso\").",
+        "exemplo": "form.lblInfo.text = \"Olá!\""
+      }
+    },
+    {
+      "type": "TextField",
+      "label": "TextField",
+      "category": "Entradas",
+      "width": 160,
+      "height": 28,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "placeholder",
+          "label": "Dica (placeholder)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "readOnly",
+          "label": "Somente leitura",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "aliases": {
+        "text": "value"
+      },
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Uma caixinha onde o usuário digita uma linha de texto.",
+        "paraQue": "Pedir nome, e-mail, número... qualquer resposta curta.",
+        "exemplo": "nome = form.txtNome.value"
+      }
+    },
+    {
+      "type": "TextArea",
+      "label": "TextArea",
+      "category": "Entradas",
+      "width": 200,
+      "height": 80,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "readOnly",
+          "label": "Somente leitura",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "aliases": {
+        "text": "value"
+      },
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Uma caixa grande para digitar vários parágrafos.",
+        "paraQue": "Observações, comentários, textos longos.",
+        "exemplo": "form.txtObs.value = \"Texto com\\nvárias linhas\""
+      }
+    },
+    {
+      "type": "Button",
+      "label": "Button",
+      "category": "Entradas",
+      "width": 96,
+      "height": 30,
+      "props": [
+        {
+          "key": "text",
+          "label": "Texto",
+          "type": "string",
+          "default": "Button"
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Um botão que o usuário clica para pedir uma ação.",
+        "paraQue": "Salvar, enviar, calcular, limpar... é onde você liga o seu código.",
+        "exemplo": "@form.btnOk.on_click\ndef ao_clicar():\n    app.show_message(\"Clicou!\")"
+      }
+    },
+    {
+      "type": "CheckBox",
+      "label": "CheckBox",
+      "category": "Entradas",
+      "width": 120,
+      "height": 24,
+      "props": [
+        {
+          "key": "text",
+          "label": "Texto",
+          "type": "string",
+          "default": "CheckBox"
+        },
+        {
+          "key": "checked",
+          "label": "Marcado",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Uma caixinha de marcar, com duas respostas: marcada ou não.",
+        "paraQue": "Opções de sim/não, como \"Lembrar de mim\".",
+        "exemplo": "if form.chkLembrar.checked:\n    print(\"marcado\")"
+      }
+    },
+    {
+      "type": "RadioGroup",
+      "label": "RadioGroup",
+      "category": "Entradas",
+      "width": 140,
+      "height": 64,
+      "props": [
+        {
+          "key": "items",
+          "label": "Itens",
+          "type": "items",
+          "default": [
+            "Opção 1",
+            "Opção 2"
+          ]
+        },
+        {
+          "key": "selectedIndex",
+          "label": "Índice selecionado",
+          "type": "number",
+          "default": 0,
+          "min": -1
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "selectedItem": true,
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "add_item",
+        "remove_item",
+        "remove_at",
+        "clear"
+      ],
+      "help": {
+        "resumo": "Um grupo de bolinhas em que só uma pode ser escolhida.",
+        "paraQue": "Escolher uma opção entre poucas, como o estado civil.",
+        "exemplo": "escolhida = form.rgSexo.selected_item"
+      }
+    },
+    {
+      "type": "ComboBox",
+      "label": "ComboBox",
+      "category": "Entradas",
+      "width": 160,
+      "height": 28,
+      "props": [
+        {
+          "key": "items",
+          "label": "Itens",
+          "type": "items",
+          "default": [
+            "Item 1",
+            "Item 2"
+          ]
+        },
+        {
+          "key": "selectedIndex",
+          "label": "Índice selecionado",
+          "type": "number",
+          "default": -1,
+          "min": -1
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "selectedItem": true,
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "add_item",
+        "remove_item",
+        "remove_at",
+        "clear"
+      ],
+      "help": {
+        "resumo": "Uma lista que se abre ao clicar, para escolher um item.",
+        "paraQue": "Escolher uma opção entre muitas, ocupando pouco espaço (UF, cidade).",
+        "exemplo": "form.cbUF.add_item(\"SP\")\nprint(form.cbUF.selected_item)"
+      }
+    },
+    {
+      "type": "ListBox",
+      "label": "ListBox",
+      "category": "Entradas",
+      "width": 160,
+      "height": 100,
+      "props": [
+        {
+          "key": "items",
+          "label": "Itens",
+          "type": "items",
+          "default": [
+            "Item 1",
+            "Item 2",
+            "Item 3"
+          ]
+        },
+        {
+          "key": "selectedIndex",
+          "label": "Índice selecionado",
+          "type": "number",
+          "default": -1,
+          "min": -1
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "selectedItem": true,
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        },
+        {
+          "name": "double_click",
+          "doc": "Quando o usuário dá dois cliques num item."
+        }
+      ],
+      "methods": [
+        "add_item",
+        "remove_item",
+        "remove_at",
+        "clear"
+      ],
+      "help": {
+        "resumo": "Uma lista sempre visível, com os itens um embaixo do outro.",
+        "paraQue": "Mostrar vários itens (tarefas, nomes) e deixar escolher um.",
+        "exemplo": "form.lstTarefas.add_item(\"Comprar pão\")"
+      }
+    },
+    {
+      "type": "Image",
+      "label": "Image",
+      "category": "Exibição",
+      "width": 120,
+      "height": 90,
+      "props": [
+        {
+          "key": "source",
+          "label": "Arquivo de imagem",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "stretch",
+          "label": "Ajuste",
+          "type": "enum",
+          "default": "fit",
+          "options": [
+            "none",
+            "fit",
+            "fill"
+          ]
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Uma figura, como uma foto ou um logotipo.",
+        "paraQue": "Deixar a tela mais bonita ou mostrar uma imagem do seu projeto.",
+        "exemplo": "form.imgLogo.visible = False"
+      }
+    },
+    {
+      "type": "Panel",
+      "label": "Panel",
+      "category": "Containers",
+      "width": 240,
+      "height": 160,
+      "container": true,
+      "props": [
+        {
+          "key": "layout",
+          "label": "Layout",
+          "type": "enum",
+          "default": "absolute",
+          "options": [
+            "absolute",
+            "vertical",
+            "horizontal"
+          ]
+        },
+        {
+          "key": "gap",
+          "label": "Espaço entre itens",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 200
+        },
+        {
+          "key": "padding",
+          "label": "Margem interna",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 200
+        },
+        {
+          "key": "align",
+          "label": "Alinhamento",
+          "type": "enum",
+          "default": "start",
+          "options": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [],
+      "help": {
+        "resumo": "Uma caixa que guarda outros componentes dentro dela.",
+        "paraQue": "Agrupar partes da tela e organizá-las automaticamente em coluna ou linha.",
+        "exemplo": "form.pnlOpcoes.visible = False   # esconde tudo que está dentro"
+      }
+    },
+    {
+      "type": "Tabs",
+      "label": "Tabs",
+      "category": "Containers",
+      "width": 280,
+      "height": 180,
+      "container": true,
+      "insetTop": 24,
+      "props": [
+        {
+          "key": "tabs",
+          "label": "Abas",
+          "type": "items",
+          "default": [
+            "Aba 1",
+            "Aba 2"
+          ]
+        },
+        {
+          "key": "selectedIndex",
+          "label": "Aba selecionada",
+          "type": "number",
+          "default": 0,
+          "min": 0
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "add_item",
+        "remove_item",
+        "remove_at",
+        "clear"
+      ],
+      "help": {
+        "resumo": "Várias \"páginas\" na mesma tela, escolhidas por abas no topo.",
+        "paraQue": "Separar assuntos diferentes sem lotar a janela.",
+        "exemplo": "form.tabPrincipal.selected_index = 1   # vai para a 2ª aba"
+      }
+    },
+    {
+      "type": "Table",
+      "label": "Table",
+      "category": "Dados",
+      "width": 300,
+      "height": 140,
+      "props": [
+        {
+          "key": "columns",
+          "label": "Colunas",
+          "type": "items",
+          "default": [
+            "Coluna 1",
+            "Coluna 2",
+            "Coluna 3"
+          ]
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background"
+      ],
+      "runtimeProps": {
+        "rows": [],
+        "selectedIndex": -1
+      },
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "add_row",
+        "remove_at",
+        "clear"
+      ],
+      "help": {
+        "resumo": "Uma tabela com linhas e colunas.",
+        "paraQue": "Mostrar listas de dados com mais de uma informação por linha.",
+        "exemplo": "form.tblClientes.add_row([\"Ana\", \"ana@email.com\"])"
+      }
+    }
+  ]
+}

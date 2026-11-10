@@ -1,24 +1,12 @@
 // A API Python que o script enxerga (form.<id>.<membro>), usada para autocompletar e verificar o código.
 // Espelha python/vform_runtime/components.py: um teste confere que as tabelas de eventos não divergem.
 import type { FormDocument } from '@shared/project'
-import { allPropDefs, CATALOG_BY_TYPE, type PropType } from '../components/catalog'
+import { REGISTRY } from '@shared/registry'
+import { allPropDefs, CATALOG, CATALOG_BY_TYPE, type PropType } from '../components/catalog'
 import { walk } from './tree'
 
-/** Eventos por tipo (nome usado em `@form.x.on_<evento>`). */
-export const EVENTS: Record<string, string[]> = {
-  Label: ['click'],
-  Button: ['click'],
-  Image: ['click'],
-  Panel: ['click'],
-  TextField: ['change'],
-  TextArea: ['change'],
-  CheckBox: ['change'],
-  RadioGroup: ['change'],
-  ComboBox: ['change'],
-  ListBox: ['change', 'double_click'],
-  Tabs: ['change'],
-  Table: ['change']
-}
+/** Eventos por tipo (nome usado em `@form.x.on_<evento>`), vindos do Component Registry. */
+export const EVENTS: Record<string, string[]> = Object.fromEntries(CATALOG.map((c) => [c.type, c.events.map((e) => e.name)]))
 
 /** Evento criado pelo duplo clique no componente (o mais comum de cada tipo). */
 export function defaultEvent(type: string): string {
@@ -58,10 +46,9 @@ const GEOMETRY_DOC: Record<string, string> = {
   height: 'Altura (px).'
 }
 
-const EVENT_DOC: Record<string, string> = {
-  click: 'Quando o usuário clica.',
-  change: 'Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...).',
-  double_click: 'Quando o usuário dá dois cliques num item.'
+const RUNTIME_DOC: Record<string, string> = {
+  rows: 'Linhas da tabela (lista de listas).',
+  selectedIndex: 'Linha selecionada (-1 = nenhuma).'
 }
 
 /** Todos os membros do componente de um tipo: propriedades, métodos e eventos. */
@@ -86,30 +73,23 @@ export function membersOf(type: string): Member[] {
     })
   }
 
-  if (type === 'TextField' || type === 'TextArea') add({ name: 'text', kind: 'property', detail: 'texto', doc: 'Apelido de `value`.' })
-  if (type === 'Table') {
-    keys.add('rows')
-    add({ name: 'rows', kind: 'property', detail: 'lista', doc: 'Linhas da tabela (lista de listas).' })
-    add({ name: 'selected_index', kind: 'property', detail: 'número', doc: 'Linha selecionada (-1 = nenhuma).' })
+  for (const [alias, target] of Object.entries(def.aliases ?? {})) add({ name: alias, kind: 'property', detail: 'texto', doc: `Apelido de \`${target}\`.` })
+  for (const key of Object.keys(def.runtimeProps ?? {})) {
+    keys.add(key)
+    add({ name: toSnake(key), kind: 'property', detail: key === 'rows' ? 'lista' : 'número', doc: RUNTIME_DOC[key] ?? 'Propriedade de execução.' })
   }
-  if (keys.has('items') && keys.has('selectedIndex'))
-    add({ name: 'selected_item', kind: 'property', detail: 'valor', doc: 'O item selecionado (None se não há).' })
+  if (def.selectedItem) add({ name: 'selected_item', kind: 'property', detail: 'valor', doc: 'O item selecionado (None se não há).' })
   add({ name: 'id', kind: 'property', detail: 'texto (somente leitura)', doc: 'O ID do componente.' })
   add({ name: 'type', kind: 'property', detail: 'texto (somente leitura)', doc: 'O tipo do componente.' })
 
-  if (keys.has('items') || keys.has('tabs')) {
-    add({ name: 'add_item', kind: 'method', detail: 'add_item(item)', doc: 'Acrescenta um item ao final.', insert: 'add_item($0)' })
-    add({ name: 'remove_item', kind: 'method', detail: 'remove_item(item)', doc: 'Remove o primeiro item igual a `item`.', insert: 'remove_item($0)' })
-  }
-  if (type === 'Table') add({ name: 'add_row', kind: 'method', detail: 'add_row(linha)', doc: 'Acrescenta uma linha (lista de valores).', insert: 'add_row($0)' })
-  if (keys.has('items') || keys.has('tabs') || type === 'Table') {
-    add({ name: 'remove_at', kind: 'method', detail: 'remove_at(índice)', doc: 'Remove o item da posição `índice`.', insert: 'remove_at($0)' })
-    add({ name: 'clear', kind: 'method', detail: 'clear()', doc: 'Remove todos os itens e limpa a seleção.', insert: 'clear()' })
+  for (const name of def.methods) {
+    const m = REGISTRY.methods[name]
+    if (m) add({ name, kind: 'method', detail: m.detail, doc: m.doc, insert: m.insert })
   }
   add({ name: 'on', kind: 'method', detail: 'on(evento, função)', doc: 'Registra um handler: `btn.on("click", fn)`.', insert: 'on("$1", $0)' })
 
-  for (const event of EVENTS[type] ?? [])
-    add({ name: `on_${event}`, kind: 'event', detail: 'evento (decorador)', doc: EVENT_DOC[event], insert: `on_${event}` })
+  for (const event of def.events)
+    add({ name: `on_${event.name}`, kind: 'event', detail: 'evento (decorador)', doc: event.doc, insert: `on_${event.name}` })
   return [...out.values()]
 }
 

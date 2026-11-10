@@ -239,7 +239,7 @@ class ComponentsTest(unittest.TestCase):
         self.assertEqual(h.of("patch")[0]["changes"], [{"id": "tbl", "prop": "rows", "value": [[1, "x"], [2, "y"]]}])
         h = Harness()
         h.load("form.cbUF.add_row([1])")
-        self.assertIn("só Table", h.errors()[0]["text"])
+        self.assertIn("não tem o método 'add_row'", h.errors()[0]["text"])
 
     def test_remove_item_inexistente_e_erro_do_usuario(self) -> None:
         h = Harness()
@@ -505,3 +505,30 @@ class SubprocessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegistryTest(unittest.TestCase):
+    """O runtime lê o MESMO registry/components.json da IDE: nada de tabelas duplicadas."""
+
+    def test_todo_metodo_do_registro_existe_no_componente(self) -> None:
+        from vform_runtime import registry
+        from vform_runtime.components import Component
+
+        for name in registry.DATA["methods"]:
+            self.assertTrue(callable(getattr(Component, name, None)), f"Component.{name} não existe")
+        for comp_type, methods in registry.METHODS.items():
+            self.assertLessEqual(methods, set(registry.DATA["methods"]), comp_type)
+
+    def test_eventos_e_listas_vem_do_registro(self) -> None:
+        from vform_runtime import registry
+
+        self.assertEqual(registry.EVENTS["ListBox"], ("change", "double_click"))
+        self.assertEqual(registry.list_props("Table"), frozenset({"columns", "rows"}))
+        self.assertEqual(registry.ALIASES["TextField"], {"text": "value"})
+        self.assertIn("ComboBox", registry.SELECTED_ITEM)
+        self.assertNotIn("Tabs", registry.SELECTED_ITEM)
+
+    def test_metodo_fora_do_tipo_da_erro_claro(self) -> None:
+        h = Harness()
+        h.load("form.btnOk.add_item('x')")
+        self.assertIn("não tem o método 'add_item'", h.errors()[0]["text"])
