@@ -25,7 +25,7 @@ function Row({ node, depth }: { node: FormNode; depth: number }): React.JSX.Elem
       {node.children && node.children.length > 0 && (
         <ul className="tree">
           {node.children.map((c) => (
-            <Row key={c.id} node={c} depth={depth + 1} />
+            <Row key={c.uid} node={c} depth={depth + 1} />
           ))}
         </ul>
       )}
@@ -52,7 +52,7 @@ export function OutlineTree(): React.JSX.Element {
             ) : (
               <ul className="tree">
                 {doc.children.map((n) => (
-                  <Row key={n.id} node={n} depth={1} />
+                  <Row key={n.uid} node={n} depth={1} />
                 ))}
               </ul>
             )}

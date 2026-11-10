@@ -139,6 +139,7 @@ function NodeView({ node, parent, selected, showHandles, onNodeDown, onHandleDow
     <div
       className={classes.join(' ')}
       data-node-id={node.id}
+      data-uid={node.uid}
       data-container={container ? 'true' : undefined}
       style={style}
       onPointerDown={(e) => onNodeDown(e, node)}
@@ -155,7 +156,7 @@ function NodeView({ node, parent, selected, showHandles, onNodeDown, onHandleDow
         <div className={`children-layer${own.mode !== 'absolute' ? ' auto' : ''}`} style={layerStyle}>
           {visibleChildren(node).map((child) => (
             <NodeView
-              key={child.id}
+              key={child.uid}
               node={child}
               parent={node}
               selected={selected}
@@ -664,7 +665,7 @@ export function DesignSurface({ doc }: { doc: FormDocument }): React.JSX.Element
         {doc.children.length === 0 && <span className="surface-hint">Arraste componentes da paleta para cá</span>}
         {doc.children.map((node) => (
           <NodeView
-            key={node.id}
+            key={node.uid}
             node={node}
             parent={null}
             selected={selected}

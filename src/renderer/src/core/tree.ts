@@ -27,6 +27,22 @@ export function locate(root: HasChildren, id: string): Located | null {
   return search(root.children, null)
 }
 
+/** Localiza pelo uid (a identidade que não muda quando o `id` é renomeado). */
+export function locateByUid(root: HasChildren, uid: string): Located | null {
+  function search(list: FormNode[], parent: FormNode | null): Located | null {
+    for (let i = 0; i < list.length; i++) {
+      const node = list[i]
+      if (node.uid === uid) return { node, list, parent, index: i }
+      if (node.children) {
+        const found = search(node.children, node)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  return search(root.children, null)
+}
+
 export function walk(root: HasChildren, fn: (node: FormNode, depth: number) => void): void {
   function visit(list: FormNode[], depth: number): void {
     for (const node of list) {

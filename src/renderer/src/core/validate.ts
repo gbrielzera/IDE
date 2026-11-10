@@ -1,6 +1,7 @@
 // Validação de um formulário já lido: tipos de componente, propriedades, limites e tamanhos.
 import type { FormDocument, FormNode } from '@shared/project'
 import type { Issue } from '@shared/manifest'
+import { isUid } from '@shared/uid'
 import { CATALOG_BY_TYPE, propDef, type PropDef } from '../components/catalog'
 
 export const MAX_NODES = 5000
@@ -42,10 +43,14 @@ export function validateForm(doc: FormDocument, file?: string): Issue[] {
     if (!Number.isFinite(v) || v < 1 || v > MAX_DIMENSION) add('error', `${k} do formulário inválida (${String(v)}).`)
 
   let count = 0
+  const uids = new Set<string>()
   const visit = (nodes: FormNode[], depth: number, parent: FormNode | null): void => {
     if (depth > MAX_DEPTH) return add('error', `Aninhamento profundo demais (mais de ${MAX_DEPTH} níveis).`, parent?.id)
     for (const n of nodes) {
       if (++count > MAX_NODES) return
+      if (!isUid(n.uid)) add('error', 'identidade interna (uid) ausente ou inválida.', n.id)
+      else if (uids.has(n.uid)) add('error', `identidade interna (uid) repetida: ${n.uid}.`, n.id)
+      else uids.add(n.uid)
       const def = CATALOG_BY_TYPE[n.type]
       if (!def) {
         add('error', `tipo de componente desconhecido: "${n.type}".`, n.id)

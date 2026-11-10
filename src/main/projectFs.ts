@@ -31,7 +31,7 @@ async function trustDir(dir: string): Promise<void> {
 /** Pasta do projeto aberto em cada janela. O renderer nunca escolhe onde gravar. */
 const openDirs = new Map<number, string>()
 
-const SAVABLE_EXTENSIONS = new Set(['.json', '.py'])
+const SAVABLE_EXTENSIONS = new Set(['.json', '.py', '.bak'])
 
 /** Guarda a pasta do projeto como "última usada" (persistente: vale na próxima vez que o app abrir). */
 function rememberDir(dir: string): void {
@@ -186,7 +186,10 @@ async function saveProject(e: IpcMainInvokeEvent, files: unknown, discard?: unkn
         if (await exists(from)) renames.push([from, `${from}.removido`])
       }
     }
-    for (const [full, content] of writes) await writeFileSafely(full, content)
+    for (const [full, content] of writes) {
+      if (full.toLowerCase().endsWith('.bak') && (await exists(full))) continue // cópia de segurança: nunca sobrescreve
+      await writeFileSafely(full, content)
+    }
     for (const [from, to] of renames) {
       await fs.rm(to, { force: true })
       await fs.rename(from, to)

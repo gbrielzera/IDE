@@ -1,3 +1,4 @@
+import { newUid } from '@shared/uid'
 // Comandos de edição: funções que alteram um rascunho (draft) do formulário.
 // Toda mutação passa por aqui; o histórico (history.ts) transforma cada uma em desfazer/refazer.
 import type { FormDocument, FormNode } from '@shared/project'
@@ -27,6 +28,7 @@ export function createNode(doc: FormDocument, type: string, x: number, y: number
   const def = CATALOG_BY_TYPE[type]
   if (!def) return null
   const node: FormNode = {
+    uid: newUid(),
     id: uniqueId(type, allIds(doc)),
     type,
     x: Math.max(0, Math.round(x)),
@@ -112,6 +114,7 @@ export function deleteNodes(doc: FormDocument, ids: readonly string[]): void {
 }
 
 function renameTree(node: FormNode, taken: Set<string>): void {
+  node.uid = newUid() // cópia = componente novo: nunca repete a identidade do original
   node.id = uniqueId(node.type, taken)
   taken.add(node.id)
   node.children?.forEach((c) => renameTree(c, taken))

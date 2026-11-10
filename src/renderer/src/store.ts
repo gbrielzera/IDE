@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { newFormDocument, newFormScript, PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
+import { FORM_SCHEMA_VERSION, newFormDocument, newFormScript, PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
 import { alignNodes, canAlign, canDistribute, distributeNodes, type AlignMode, type Axis } from './core/align'
 import { clampRect, contentSize } from './core/bounds'
 import { CATALOG, CATALOG_BY_TYPE } from './components/catalog'
@@ -26,7 +26,7 @@ import {
 } from './core/history'
 import { allIds, locate, topmost } from './core/tree'
 import { formNameProblem, idProblem } from './core/ids'
-import { parseFormDocument, serializeForm } from './core/model'
+import { parseFormDocumentEx, serializeForm } from './core/model'
 import { formatIssue } from '@shared/manifest'
 import { validateForm } from './core/validate'
 import { isAutoLayout, layoutOf } from './core/props'
@@ -138,6 +138,8 @@ interface IdeState {
   removeForm(name: string): void
   /** Arquivos de telas removidas que serão renomeados ao salvar. */
   removedFiles: string[]
+  /** Cópias de segurança de formulários migrados, gravadas no próximo salvamento. */
+  pendingBackups: Record<string, string>
   openTab(form: string, view: View): void
   log(level: LogLevel, text: string, meta?: { line?: number; file?: string }): void
   clearConsole(): void
@@ -231,9 +233,18 @@ export const useIde = create<IdeState>((set, get) => {
         const { project } = res
         const tracked: Record<string, Tracked> = {}
         const problems: string[] = []
+        const upgraded: string[] = []
+        const backups: Record<string, string> = {}
         for (const form of project.manifest.forms) {
           try {
-            tracked[form.name] = createTracked(parseFormDocument(project.files[form.layout]))
+            const parsed = parseFormDocumentEx(project.files[form.layout])
+            tracked[form.name] = createTracked(parsed.doc)
+            if (parsed.upgraded) {
+              upgraded.push(form.name)
+              // Cópia de segurança do arquivo original, gravada no primeiro salvamento (nunca sobrescreve uma já existente).
+              if (parsed.fromVersion < FORM_SCHEMA_VERSION) backups[`${form.layout}.v${parsed.fromVersion}.bak`] = project.files[form.layout]
+              get().log('info', parsed.repairedUids > 0 ? `Formulário ${form.name}: ${parsed.repairedUids} identificador(es) interno(s) repetido(s) ou ausente(s) foram refeitos.` : `Formulário ${form.name} atualizado da versão ${parsed.fromVersion} para ${FORM_SCHEMA_VERSION} (identidade interna dos componentes). O arquivo muda no próximo salvamento; o original fica em ${form.layout}.v${parsed.fromVersion}.bak.`)
+            }
           } catch (err) {
             problems.push(`Formulário ${form.name}: ${err instanceof Error ? err.message : String(err)}`)
           }
@@ -251,12 +262,13 @@ export const useIde = create<IdeState>((set, get) => {
           runErrors: {},
           formPos: {},
           removedFiles: [],
+          pendingBackups: backups,
           formDialog: null,
           reveal: null,
           activeView: 'design',
           selection: [],
           activeForm: project.manifest.forms[0]?.name ?? null,
-          dirty: false
+          dirty: upgraded.length > 0
         })
         document.title = `${project.manifest.name} — VForm IDE`
         get().log('info', `Projeto "${project.manifest.name}" ${kind === 'new' ? 'criado' : 'aberto'} em ${project.dir}`)
@@ -343,7 +355,7 @@ export const useIde = create<IdeState>((set, get) => {
       try {
         // Grava os layouts e só os scripts alterados aqui: um script que ninguém mexeu na IDE pode ter
         // sido editado em outro programa, e regravar a cópia antiga o desfaria.
-        const files: Record<string, string> = { [PROJECT_FILE]: project.files[PROJECT_FILE] }
+        const files: Record<string, string> = { [PROJECT_FILE]: project.files[PROJECT_FILE], ...get().pendingBackups }
         for (const form of project.manifest.forms) {
           const t = tracked[form.name]
           if (t) files[form.layout] = serializeForm(t.doc)
@@ -351,7 +363,7 @@ export const useIde = create<IdeState>((set, get) => {
         }
         const res = await window.vform.saveProject(files, get().removedFiles)
         if (res.ok) {
-          set({ project: { ...get().project!, files: { ...get().project!.files, ...files } }, scriptDirty: {}, removedFiles: [], dirty: false })
+          set({ project: { ...get().project!, files: { ...get().project!.files, ...files } }, scriptDirty: {}, removedFiles: [], pendingBackups: {}, dirty: false })
           if (!opts?.silent) get().log('info', 'Projeto salvo.')
         } else {
           get().log('error', `Falha ao salvar: ${res.error}`)
@@ -365,6 +377,7 @@ export const useIde = create<IdeState>((set, get) => {
 
     formDialog: null,
     removedFiles: [],
+    pendingBackups: {},
     openFormDialog: (formDialog) => set({ formDialog }),
     closeFormDialog: () => set({ formDialog: null }),
     async trustAndRun() {

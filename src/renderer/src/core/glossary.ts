@@ -34,6 +34,12 @@ export const TERMS: Term[] = [
     exemplo: 'btnSalvar, txtNome, lblResultado'
   },
   {
+    nome: 'Identidade interna (uid)',
+    explicacao:
+      'Cada componente tem, por trás do ID, um código interno que nunca muda (você não precisa mexer nele). Por isso renomear o ID não "recria" o componente: a seleção, o histórico de desfazer e o que você está editando continuam valendo. Cópias ganham um uid novo. Projetos antigos recebem os uids ao abrir (o original fica salvo como .bak na primeira gravação).',
+    exemplo: 'form.btnSalvar  # o ID (btnSalvar) pode mudar; o uid, não'
+  },
+  {
     nome: 'Propriedade',
     explicacao: 'Uma característica do componente que você pode ler ou mudar: o texto, a cor, se está visível...',
     exemplo: 'form.btnOk.text = "Enviar"'
@@ -203,6 +209,7 @@ export const NOVIDADES: Novidade[] = [
   {
     titulo: 'Versão atual',
     itens: [
+      'Identidade estável: cada componente tem um uid interno; renomear o ID mantém seleção, histórico e a tela. Projetos antigos são atualizados (com cópia .bak).',
       'Component Registry: os componentes (propriedades, eventos, ações e ajuda) vêm de um único arquivo, lido pela IDE e pelo Python.',
       'Segurança: caminhos e links validados, limites no protocolo com o Python, prazo de carregamento e aviso de confiança.',
       'Validação do projeto e dos formulários ao abrir e antes de executar; base para migrações de versão.',

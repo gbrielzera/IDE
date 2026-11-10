@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { formatIssue, validateManifest } from '../../src/shared/manifest'
 import { newFormDocument, type FormDocument } from '../../src/shared/project'
+import { newUid } from '../../src/shared/uid'
 import { migrateForm } from '../../src/renderer/src/core/migrate'
 import { validateForm } from '../../src/renderer/src/core/validate'
 
@@ -39,7 +40,7 @@ function doc(children: FormDocument['children']): FormDocument {
   return { ...newFormDocument('Main'), children }
 }
 const node = (over: Record<string, unknown>): FormDocument['children'][number] =>
-  ({ id: 'b1', type: 'Button', x: 0, y: 0, width: 100, height: 30, props: { text: 'Ok' }, ...over }) as FormDocument['children'][number]
+  ({ uid: newUid(), id: 'b1', type: 'Button', x: 0, y: 0, width: 100, height: 30, props: { text: 'Ok' }, ...over }) as FormDocument['children'][number]
 
 describe('validateForm', () => {
   it('formulário normal não tem problemas', () => {
@@ -74,7 +75,7 @@ describe('validateForm', () => {
 
 describe('migrateForm', () => {
   it('na versão atual não faz nada', () => {
-    const r = migrateForm({ version: 1, name: 'A' })
+    const r = migrateForm({ version: 2, name: 'A' })
     expect(r.applied).toEqual([])
     expect(r.doc.name).toBe('A')
   })

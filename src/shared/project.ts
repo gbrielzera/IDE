@@ -6,6 +6,8 @@ export const PROJECT_FILE = 'project.json'
 export const PROJECT_FORMAT = 'vform-project'
 export const FORM_FORMAT = 'vform-form'
 export const SCHEMA_VERSION = 1
+/** Versão do arquivo de formulário. 2: cada componente tem `uid` (identidade interna estável). */
+export const FORM_SCHEMA_VERSION = 2
 
 export interface ProjectFormRef {
   /** Nome do formulário; também é a base dos arquivos (Main → Main.form.json + Main.py). */
@@ -23,6 +25,9 @@ export interface ProjectManifest {
 
 /** Um componente no formulário. x/y são relativos ao pai (formulário ou container). */
 export interface FormNode {
+  /** Identidade interna imutável (UUID). Renomear o `id` não a altera; cópias recebem um uid novo. */
+  uid: string
+  /** Nome legível usado como referência no código Python (`form.<id>`); editável. */
   id: string
   type: string
   x: number
@@ -77,7 +82,7 @@ export interface VformApi {
 }
 
 export function newFormDocument(name: string): FormDocument {
-  return { format: FORM_FORMAT, version: SCHEMA_VERSION, name, title: name, width: 640, height: 480, children: [] }
+  return { format: FORM_FORMAT, version: FORM_SCHEMA_VERSION, name, title: name, width: 640, height: 480, children: [] }
 }
 
 export function newFormScript(name: string): string {

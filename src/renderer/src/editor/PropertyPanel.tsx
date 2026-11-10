@@ -110,7 +110,7 @@ export function PropertyPanel(): React.JSX.Element {
           <p>{selection.length} componentes selecionados</p>
         ) : node ? (
           // O `key` recria os editores ao trocar de componente (descarta rascunhos pendentes).
-          <ComponentProps key={node.id} node={node} />
+          <ComponentProps key={node.uid} node={node} />
         ) : (
           <FormProps doc={doc} />
         )}
