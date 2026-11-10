@@ -5,7 +5,9 @@ import { basename, join } from 'node:path'
 import type { FormDocument } from '@shared/project'
 import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded, type RunInit, type RunPayload, type RunStartResult, type RunToPython } from '@shared/run'
 import type { RunScreen } from '@shared/run'
-import { getProjectDir, insideProject } from './projectFs'
+import { getProjectDir } from './projectFs'
+import { clampText, sanitizePatch } from './protocol'
+import { insideProjectReal } from './pathSafety'
 import { findPython, PythonHost, type PyMessage, type PythonCommand } from './pythonHost'
 
 interface Run {
@@ -24,6 +26,8 @@ interface Run {
   runtime: string
   dir: string
   loaded: boolean
+  /** Vigia: o script precisa terminar de carregar (mensagem `loaded`) dentro do prazo. */
+  loadTimer: ReturnType<typeof setTimeout> | null
   ended: boolean
   /** Quem pediu o fim: a IDE (Parar) ou quem fechou a janela de execução. */
   stopping: boolean
@@ -59,6 +63,17 @@ function parsePayload(raw: unknown): RunPayload | null {
   if (!doc || typeof doc.width !== 'number' || typeof doc.height !== 'number' || !Array.isArray(doc.children)) return null
   if (typeof p.components !== 'object' || p.components === null) return null
   return p as RunPayload
+}
+
+function clearLoadTimer(run: Run): void {
+  if (run.loadTimer) clearTimeout(run.loadTimer)
+  run.loadTimer = null
+}
+
+/** Prazo para o script terminar de carregar (um laço infinito no nível do arquivo trava a execução). */
+function loadTimeoutMs(): number {
+  const n = Number(process.env['VFORM_LOAD_TIMEOUT_MS'])
+  return Number.isFinite(n) && n > 0 ? n : 30_000
 }
 
 function toIde(run: Run, channel: string, payload: unknown): void {
@@ -113,22 +128,23 @@ function scheduleDockRestore(ide: BrowserWindow): void {
   }, 250)
 }
 
-function endRun(run: Run, reason: RunEnded['reason'], code: number | null = null): void {
+function endRun(run: Run, reason: RunEnded['reason'], code: number | null = null, force = false): void {
   if (run.ended) return
   run.ended = true
+  clearLoadTimer(run)
   byRunWindow.delete(run.winContentsId)
   if (byIde.get(run.ide.id) === run) byIde.delete(run.ide.id)
-  run.host.stop()
+  run.host.stop(force || reason === 'crashed') // script travado: mata na hora, sem esperar o pedido educado
   if (!run.win.isDestroyed()) run.win.close()
   toIde(run, 'run:ended', { runId: run.id, reason, code } satisfies RunEnded)
   scheduleDockRestore(run.ide)
 }
 
-export function stopRunFor(ideWindowId: number): void {
+export function stopRunFor(ideWindowId: number, force = false): void {
   const run = byIde.get(ideWindowId)
   if (!run) return
   run.stopping = true
-  endRun(run, 'stopped')
+  endRun(run, 'stopped', null, force)
 }
 
 /**
@@ -161,14 +177,20 @@ function onPythonMessage(run: Run, msg: PyMessage): void {
       const level = msg.level === 'warn' || msg.level === 'error' ? msg.level : 'info'
       ideConsole(run, {
         level,
-        text: String(msg.text ?? ''),
+        text: clampText(String(msg.text ?? '')),
         line: typeof msg.line === 'number' ? msg.line : undefined,
         file: typeof msg.file === 'string' ? msg.file : undefined
       })
       break
     }
-    case 'patch':
-      if (!run.win.isDestroyed()) run.win.webContents.send('run:message', msg)
+    case 'patch': {
+      const { changes, rejected } = sanitizePatch(msg.changes)
+      if (rejected > 0) ideConsole(run, { level: 'warn', text: `${rejected} alteração(ões) inválida(s) do runtime foram ignoradas.` })
+      if (changes.length > 0 && !run.win.isDestroyed()) run.win.webContents.send('run:message', { type: 'patch', changes })
+      break
+    }
+    case 'loaded':
+      clearLoadTimer(run)
       break
     case 'message':
       if (!run.win.isDestroyed())
@@ -197,7 +219,7 @@ async function loadScreens(dir: string, screens: RunScreen[] | undefined): Promi
     if (typeof s?.formName !== 'string' || typeof s.scriptPath !== 'string' || !s.doc || typeof s.components !== 'object') continue
     let script = ''
     try {
-      script = typeof s.script === 'string' ? s.script : await fs.readFile(insideProject(dir, s.scriptPath), 'utf8')
+      script = typeof s.script === 'string' ? s.script : await fs.readFile(await insideProjectReal(dir, s.scriptPath), 'utf8')
     } catch {
       // Sem script: a tela abre só com o layout.
     }
@@ -208,6 +230,7 @@ async function loadScreens(dir: string, screens: RunScreen[] | undefined): Promi
 
 /** Troca a tela exibida: reinicia só o Python (script novo), ajusta o tamanho/título da janela e recarrega o layout. */
 function swapScreen(run: Run, init: RunInit, scriptPath: string, script: string, fallbackTitle: string): void {
+  clearLoadTimer(run)
   const previous = run.init.doc
   const oldHost = run.host
   run.init = init
@@ -259,7 +282,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
   let script = ''
   let scriptPath: string
   try {
-    scriptPath = insideProject(dir, payload.scriptPath)
+    scriptPath = await insideProjectReal(dir, payload.scriptPath)
     script = typeof payload.script === 'string' ? payload.script : await fs.readFile(scriptPath, 'utf8')
   } catch (err) {
     if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -311,6 +334,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
     runtime,
     dir,
     loaded: false,
+    loadTimer: null,
     ended: false,
     stopping: false,
     host: null as unknown as PythonHost
@@ -321,7 +345,7 @@ async function startRun(e: IpcMainInvokeEvent, raw: unknown): Promise<RunStartRe
   byIde.set(ide.id, run)
   win.once('ready-to-show', () => showUnlessHidden(win))
   win.on('closed', () => endRun(run, run.stopping ? 'stopped' : 'closed'))
-  ide.once('closed', () => stopRunFor(ide.id))
+  ide.once('closed', () => stopRunFor(ide.id, true))
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (!existsSync(scriptPath))
@@ -360,6 +384,14 @@ export function registerRunIpc(): void {
     if (!run || run.loaded) return
     run.loaded = true
     const { doc, components } = run.init
+    clearLoadTimer(run)
+    const host = run.host
+    run.loadTimer = setTimeout(() => {
+      if (run.ended || run.host !== host) return
+      const secs = Math.round(loadTimeoutMs() / 1000)
+      ideConsole(run, { level: 'error', text: `O script não terminou de carregar em ${secs} s (laço infinito no nível do arquivo?). A execução foi interrompida.` })
+      endRun(run, 'crashed')
+    }, loadTimeoutMs())
     run.host.send({
       type: 'load_form',
       form: { name: doc.name, title: doc.title, width: doc.width, height: doc.height },
@@ -372,5 +404,5 @@ export function registerRunIpc(): void {
     const run = byRunWindow.get(e.sender.id)
     if (run && isToPython(msg)) run.host.send(msg)
   })
-  app.on('before-quit', () => [...byIde.keys()].forEach(stopRunFor))
+  app.on('before-quit', () => [...byIde.keys()].forEach((id) => stopRunFor(id, true))) // ao sair, nenhum Python fica para trás
 }

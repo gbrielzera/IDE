@@ -27,6 +27,8 @@ import {
 import { allIds, locate, topmost } from './core/tree'
 import { formNameProblem, idProblem } from './core/ids'
 import { parseFormDocument, serializeForm } from './core/model'
+import { formatIssue } from '@shared/manifest'
+import { validateForm } from './core/validate'
 import { isAutoLayout, layoutOf } from './core/props'
 import type { FormNode } from '@shared/project'
 import { buildRunComponents } from './core/runstate'
@@ -126,8 +128,10 @@ interface IdeState {
   saveProject(opts?: { silent?: boolean }): Promise<void>
   setActiveForm(name: string): void
   /** Telas (formulários) do projeto: criar, remover e as janelas de confirmação. */
-  formDialog: { kind: 'new' } | { kind: 'remove'; name: string } | null
-  openFormDialog(dialog: { kind: 'new' } | { kind: 'remove'; name: string }): void
+  formDialog: { kind: 'new' } | { kind: 'remove'; name: string } | { kind: 'trust' } | null
+  openFormDialog(dialog: { kind: 'new' } | { kind: 'remove'; name: string } | { kind: 'trust' }): void
+  /** Confirma a confiança no projeto aberto e executa em seguida. */
+  trustAndRun(): Promise<void>
   closeFormDialog(): void
   /** Cria uma tela vazia e a abre; devolve a mensagem do problema (nome inválido/repetido) ou null. */
   addForm(name: string): string | null
@@ -257,6 +261,10 @@ export const useIde = create<IdeState>((set, get) => {
         document.title = `${project.manifest.name} — VForm IDE`
         get().log('info', `Projeto "${project.manifest.name}" ${kind === 'new' ? 'criado' : 'aberto'} em ${project.dir}`)
         problems.forEach((p) => get().log('error', p))
+        for (const form of project.manifest.forms) {
+          const t = tracked[form.name]
+          if (t) for (const issue of validateForm(t.doc, form.layout)) get().log(issue.severity === 'error' ? 'error' : 'warn', formatIssue(issue))
+        }
       } else if (!res.canceled) {
         get().log('error', res.error)
       }
@@ -359,6 +367,13 @@ export const useIde = create<IdeState>((set, get) => {
     removedFiles: [],
     openFormDialog: (formDialog) => set({ formDialog }),
     closeFormDialog: () => set({ formDialog: null }),
+    async trustAndRun() {
+      const { project } = get()
+      if (!project) return
+      await window.vform.trustProject()
+      set({ project: { ...project, trusted: true }, formDialog: null })
+      await get().run()
+    },
 
     addForm(rawName) {
       const { project } = get()
@@ -570,8 +585,18 @@ export const useIde = create<IdeState>((set, get) => {
       // Ao vivo, atualiza o formulário que já está em execução, não o que está na tela agora.
       const target = refresh ? get().runForm : get().activeForm
       if (!project || !target || busy) return
+      if (project.trusted === false) {
+        if (!refresh) set({ formDialog: { kind: 'trust' } }) // pergunta uma vez por projeto
+        return
+      }
       const form = project.manifest.forms.find((f) => f.name === target)
       const t = tracked[target]
+      const blocking = t && form ? validateForm(t.doc, form.layout).filter((i) => i.severity === 'error') : []
+      if (blocking.length > 0) {
+        get().log('error', `Não é possível executar: o formulário tem ${blocking.length} problema(s) a corrigir.`)
+        blocking.forEach((i) => get().log('error', formatIssue(i)))
+        return
+      }
       if (!form || !t) {
         get().log('error', 'O formulário ativo não pôde ser lido; corrija o arquivo para executar.')
         return

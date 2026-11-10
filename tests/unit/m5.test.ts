@@ -305,12 +305,14 @@ describe('configurações', () => {
       autosave: false,
       livePreview: false,
       rulers: true, // só desliga com `false` de verdade
+      trustedProjects: [],
       lastDir: undefined
     })
     expect(normalizeSettings({ autosave: true, livePreview: true, rulers: false, lastDir: 'C:\\proj' })).toEqual({
       autosave: true,
       livePreview: true,
       rulers: false,
+      trustedProjects: [],
       lastDir: 'C:\\proj'
     })
   })

@@ -12,6 +12,7 @@ const api: VformApi = {
   newProject: () => ipcRenderer.invoke('project:new'),
   openProject: () => ipcRenderer.invoke('project:open'),
   saveProject: (files, discard) => ipcRenderer.invoke('project:save', files, discard),
+  trustProject: () => ipcRenderer.invoke('project:trust'),
   help: { openManual: () => ipcRenderer.invoke('help:manual') },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

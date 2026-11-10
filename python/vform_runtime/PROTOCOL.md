@@ -57,3 +57,13 @@ app.title = "Meu app"; app.show_message("Pronto"); app.open_form("Tela2"); app.c
 
 Erros do script (inclusive de sintaxe) viram `console` com `level: "error"` e a linha; o runtime continua
 vivo e os demais handlers seguem funcionando.
+
+## Limites e falhas
+
+- Cada mensagem tem no máximo 4 milhões de caracteres (linhas maiores são descartadas com um aviso); se o stdout acumular
+  mais de 8 milhões de caracteres sem uma quebra de linha, o processo é encerrado.
+- Mensagens `patch` são validadas pela IDE: só alterações com `id` e `prop` em texto e valor JSON são aplicadas (até 5000 por mensagem).
+- O script precisa responder `loaded` em até 30 s (`VFORM_LOAD_TIMEOUT_MS` muda o prazo); senão a execução é interrompida
+  e o processo Python (com seus filhos) é morto.
+- Ao fechar a IDE ou parar a execução de um script travado, o processo é encerrado à força, inclusive os filhos (no Windows,
+  o lançador `py` abre o Python como processo filho).

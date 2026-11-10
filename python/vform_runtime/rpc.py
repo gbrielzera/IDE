@@ -11,6 +11,10 @@ import threading
 from typing import IO, Any, Callable, Iterator
 
 
+# Mensagem maior que isto (em caracteres) é descartada: protege o runtime de uma linha gigante.
+MAX_LINE_CHARS = 4 * 1024 * 1024
+
+
 class Channel:
     def __init__(self, reader: IO[str], writer: IO[str]) -> None:
         self._reader = reader
@@ -31,6 +35,9 @@ class Channel:
         for raw in self._reader:
             line = raw.strip()
             if not line:
+                continue
+            if len(line) > MAX_LINE_CHARS:
+                yield {"type": "_invalid", "raw": line[:200]}
                 continue
             try:
                 message = json.loads(line)

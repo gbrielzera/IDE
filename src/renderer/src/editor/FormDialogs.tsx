@@ -19,7 +19,7 @@ export function FormDialogs(): React.JSX.Element | null {
   return (
     <div className="dict-backdrop" onPointerDown={() => useIde.getState().closeFormDialog()}>
       <div className="mini-dialog" role="dialog" data-testid="form-dialog" onPointerDown={(e) => e.stopPropagation()}>
-        {dialog.kind === 'new' ? <NewForm /> : <RemoveForm name={dialog.name} />}
+        {dialog.kind === 'new' ? <NewForm /> : dialog.kind === 'remove' ? <RemoveForm name={dialog.name} /> : <TrustProject />}
       </div>
     </div>
   )
@@ -80,6 +80,28 @@ function RemoveForm({ name }: { name: string }): React.JSX.Element {
       <div className="dialog-buttons">
         <button onClick={() => useIde.getState().removeForm(name)} data-testid="remove-form-ok">
           Remover
+        </button>
+        <button onClick={() => useIde.getState().closeFormDialog()} autoFocus>
+          Cancelar
+        </button>
+      </div>
+    </>
+  )
+}
+
+function TrustProject(): React.JSX.Element {
+  const name = useIde((s) => s.project?.manifest.name)
+  return (
+    <>
+      <h3>Executar este projeto?</h3>
+      <p>
+        O projeto <b>{name}</b> não foi criado nesta IDE. Executá-lo roda o código Python dos scripts dele com os <b>mesmos privilégios do seu usuário</b>:
+        ele pode ler, alterar e apagar seus arquivos. Isso <b>não é um ambiente isolado</b>.
+      </p>
+      <p>Só continue se você confia em quem criou o projeto (dá para ler os arquivos .py antes).</p>
+      <div className="dialog-buttons">
+        <button onClick={() => void useIde.getState().trustAndRun()} data-testid="trust-ok">
+          Confiar e executar
         </button>
         <button onClick={() => useIde.getState().closeFormDialog()} autoFocus>
           Cancelar

@@ -198,6 +198,18 @@ export const GUIDES: Guide[] = [
     ]
   },
   {
+    id: 'seguranca',
+    titulo: 'Segurança e validação do projeto',
+    blocos: [
+      { tipo: 'p', texto: 'O código Python do projeto roda com os mesmos privilégios do seu usuário. Isso NÃO é um ambiente isolado (sandbox).' },
+      { tipo: 'li', texto: 'Projetos criados na IDE são confiáveis. Ao executar pela primeira vez um projeto aberto de fora, a IDE pede sua confirmação.' },
+      { tipo: 'li', texto: 'Ao abrir, o project.json e os formulários são conferidos: nome de tela, caminhos (nada de ".." nem caminho absoluto), tipos de componente, propriedades e limites. Os problemas aparecem no Console com o arquivo, a tela, o componente e a propriedade.' },
+      { tipo: 'li', texto: 'Formulário com erro de validação não executa até ser corrigido.' },
+      { tipo: 'li', texto: 'Links simbólicos ou junções que apontem para fora da pasta do projeto são recusados na leitura e na gravação.' },
+      { tipo: 'li', texto: 'Se o script travar ao carregar (laço infinito), a execução é interrompida depois de 30 s e o Python é encerrado.' }
+    ]
+  },
+  {
     id: 'logs',
     titulo: 'Console e Logs',
     blocos: [
@@ -249,6 +261,8 @@ export const NOVIDADES: Novidade[] = [
   {
     titulo: 'Versão atual',
     itens: [
+      'Segurança: caminhos e links validados, limites no protocolo com o Python, prazo de carregamento e aviso de confiança.',
+      'Validação do projeto e dos formulários ao abrir e antes de executar; base para migrações de versão.',
       'Várias telas: criar, trocar, remover e navegar pelo código com app.open_form.',
       'F2 e botão direito para editar o texto de um componente.',
       'Aba Logs, dicionário (F1) e este manual.',

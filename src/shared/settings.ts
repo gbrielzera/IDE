@@ -9,9 +9,11 @@ export interface Settings {
   livePreview: boolean
   /** Réguas nas bordas do formulário (como no Figma). */
   rulers: boolean
+  /** Pastas de projetos em que o usuário confia (o script Python roda com os privilégios dele, sem isolamento). */
+  trustedProjects: string[]
 }
 
-export const DEFAULT_SETTINGS: Settings = { autosave: false, livePreview: false, rulers: true }
+export const DEFAULT_SETTINGS: Settings = { autosave: false, livePreview: false, rulers: true, trustedProjects: [] }
 
 export interface SettingsApi {
   get(): Promise<Settings>
@@ -24,7 +26,8 @@ export function normalizeSettings(raw: unknown): Settings {
   const settings: Settings = {
     autosave: r.autosave === true,
     livePreview: r.livePreview === true,
-    rulers: r.rulers !== false // ligado por padrão
+    rulers: r.rulers !== false, // ligado por padrão
+    trustedProjects: Array.isArray(r.trustedProjects) ? r.trustedProjects.filter((p): p is string => typeof p === 'string').slice(-500) : []
   }
   if (typeof r.lastDir === 'string' && r.lastDir !== '') settings.lastDir = r.lastDir
   return settings

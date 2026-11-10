@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { promises as fs } from 'node:fs'
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import {
   PROJECT_FILE,
   PROJECT_FORMAT,
@@ -12,8 +12,21 @@ import {
   type ProjectResult,
   type SaveResult
 } from '@shared/project'
+import { formatIssue, MAX_FORM_JSON_BYTES, MAX_PROJECT_JSON_BYTES, MAX_SCRIPT_BYTES, validateManifest } from '@shared/manifest'
+import { insideProject, insideProjectReal } from './pathSafety'
 import { writeFileSafely } from './safeWrite'
 import { getSettings, updateSettings } from './settings'
+
+const trustKey = (dir: string): string => resolve(dir).toLowerCase()
+
+async function isTrusted(dir: string): Promise<boolean> {
+  return (await getSettings()).trustedProjects.includes(trustKey(dir))
+}
+
+async function trustDir(dir: string): Promise<void> {
+  const list = (await getSettings()).trustedProjects
+  if (!list.includes(trustKey(dir))) await updateSettings({ trustedProjects: [...list, trustKey(dir)] })
+}
 
 /** Pasta do projeto aberto em cada janela. O renderer nunca escolhe onde gravar. */
 const openDirs = new Map<number, string>()
@@ -34,14 +47,7 @@ export function getProjectDir(windowId: number): string | undefined {
   return openDirs.get(windowId)
 }
 
-/** Resolve um caminho relativo garantindo que ele fique dentro da pasta do projeto. */
-export function insideProject(dir: string, rel: string): string {
-  if (isAbsolute(rel)) throw new Error(`Caminho absoluto não permitido: ${rel}`)
-  const full = resolve(dir, rel)
-  const back = relative(dir, full)
-  if (back === '' || back.startsWith('..') || isAbsolute(back)) throw new Error(`Caminho fora do projeto: ${rel}`)
-  return full
-}
+export { insideProject, insideProjectReal }
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -52,17 +58,26 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+async function readCapped(path: string, max: number, what: string): Promise<string> {
+  const { size } = await fs.stat(path)
+  if (size > max) throw new Error(`${what} é grande demais (${Math.round(size / 1024)} KB; o limite é ${Math.round(max / 1024)} KB).`)
+  return fs.readFile(path, 'utf8')
+}
+
 async function readProject(dir: string): Promise<LoadedProject> {
-  const raw = await fs.readFile(join(dir, PROJECT_FILE), 'utf8')
-  const manifest = JSON.parse(raw) as ProjectManifest
-  if (manifest.format !== PROJECT_FORMAT) throw new Error(`${PROJECT_FILE} não é um projeto VForm.`)
-  if (manifest.version > SCHEMA_VERSION)
-    throw new Error(`Projeto na versão ${manifest.version}; esta IDE lê até a versão ${SCHEMA_VERSION}.`)
+  const raw = await readCapped(join(dir, PROJECT_FILE), MAX_PROJECT_JSON_BYTES, PROJECT_FILE)
+  let manifest: ProjectManifest
+  try {
+    manifest = JSON.parse(raw) as ProjectManifest
+  } catch {
+    throw new Error(`${PROJECT_FILE} não é um JSON válido.`)
+  }
+  const problems = validateManifest(manifest).filter((i) => i.severity === 'error')
+  if (problems.length > 0) throw new Error(problems.map(formatIssue).join('\n'))
   const files: Record<string, string> = { [PROJECT_FILE]: raw }
   for (const form of manifest.forms) {
-    for (const rel of [form.layout, form.script]) {
-      files[rel] = await fs.readFile(insideProject(dir, rel), 'utf8')
-    }
+    files[form.layout] = await readCapped(await insideProjectReal(dir, form.layout), MAX_FORM_JSON_BYTES, form.layout)
+    files[form.script] = await readCapped(await insideProjectReal(dir, form.script), MAX_SCRIPT_BYTES, form.script)
   }
   return { dir, manifest, files }
 }
@@ -95,7 +110,8 @@ async function newProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
     await fs.writeFile(join(dir, PROJECT_FILE), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
     await fs.writeFile(join(dir, `${formName}.form.json`), JSON.stringify(newFormDocument(formName), null, 2) + '\n', 'utf8')
     await fs.writeFile(join(dir, `${formName}.py`), newFormScript(formName), 'utf8')
-    const project = await readProject(dir)
+    await trustDir(dir) // quem cria o projeto é quem escreve o código
+    const project = { ...(await readProject(dir)), trusted: true }
     openDirs.set(win.id, dir)
     rememberDir(dir)
     return { ok: true, project }
@@ -138,7 +154,7 @@ async function openProject(e: IpcMainInvokeEvent): Promise<ProjectResult> {
   try {
     const dir = await projectDirFrom(picked)
     if (!(await exists(join(dir, PROJECT_FILE)))) return { ok: false, error: `A pasta não tem ${PROJECT_FILE}.` }
-    const project = await readProject(dir)
+    const project = { ...(await readProject(dir)), trusted: await isTrusted(dir) }
     openDirs.set(win.id, dir)
     rememberDir(dir)
     return { ok: true, project }
@@ -158,7 +174,7 @@ async function saveProject(e: IpcMainInvokeEvent, files: unknown, discard?: unkn
     for (const [rel, content] of Object.entries(files)) {
       if (typeof content !== 'string') throw new Error(`Conteúdo inválido para ${rel}`)
       if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
-      writes.push([insideProject(dir, rel), content])
+      writes.push([await insideProjectReal(dir, rel), content])
     }
     // Telas removidas: os arquivos não são apagados, só renomeados (dá para recuperar tirando o ".removido").
     const renames: [string, string][] = []
@@ -166,7 +182,7 @@ async function saveProject(e: IpcMainInvokeEvent, files: unknown, discard?: unkn
       if (!Array.isArray(discard) || discard.some((r) => typeof r !== 'string')) throw new Error('Lista de remoção inválida.')
       for (const rel of discard as string[]) {
         if (!SAVABLE_EXTENSIONS.has(extname(rel).toLowerCase())) throw new Error(`Tipo de arquivo não permitido: ${rel}`)
-        const from = insideProject(dir, rel)
+        const from = await insideProjectReal(dir, rel)
         if (await exists(from)) renames.push([from, `${from}.removido`])
       }
     }
@@ -185,6 +201,11 @@ export function registerProjectIpc(): void {
   ipcMain.handle('project:new', newProject)
   ipcMain.handle('project:open', openProject)
   ipcMain.handle('project:save', saveProject)
+  ipcMain.handle('project:trust', async (e: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const dir = win ? openDirs.get(win.id) : undefined
+    if (dir) await trustDir(dir)
+  })
 }
 
 export function forgetWindow(id: number): void {

@@ -49,6 +49,8 @@ export interface FormDocument {
 export interface LoadedProject {
   dir: string
   manifest: ProjectManifest
+  /** O usuário já confiou neste projeto (criado aqui ou confirmado antes). Senão a IDE pergunta antes da 1ª execução. */
+  trusted?: boolean
   /** Conteúdo dos arquivos do projeto, por caminho relativo à pasta do projeto. */
   files: Record<string, string>
 }
@@ -67,6 +69,8 @@ export interface VformApi {
   /** Grava os arquivos; `discard` lista arquivos de telas removidas, que são renomeados para `.removido` (nunca apagados). */
   saveProject(files: Record<string, string>, discard?: string[]): Promise<SaveResult>
   run: RunApi
+  /** Marca o projeto aberto como confiável (permite executar o código Python dele). */
+  trustProject(): Promise<void>
   /** Abre o manual (VForm.chm) no leitor de ajuda do Windows. */
   help: { openManual(): Promise<{ ok: true; path: string } | { ok: false; error: string }> }
   settings: SettingsApi

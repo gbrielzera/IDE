@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { LineSplitter, MAX_MESSAGE_CHARS } from './protocol'
 
 export interface PythonCommand {
   command: string
@@ -62,7 +63,7 @@ export interface HostHandlers {
 /** O processo Python do runtime, com o protocolo de uma mensagem JSON por linha. */
 export class PythonHost {
   private proc: ChildProcessWithoutNullStreams | null = null
-  private buffer = ''
+  private readonly lines = new LineSplitter()
   private stderr = ''
   private exited = false
 
@@ -84,18 +85,20 @@ export class PythonHost {
     proc.stderr.setEncoding('utf8')
 
     proc.stdout.on('data', (chunk: string) => {
-      this.buffer += chunk
-      let nl: number
-      while ((nl = this.buffer.indexOf('\n')) >= 0) {
-        const line = this.buffer.slice(0, nl).trim()
-        this.buffer = this.buffer.slice(nl + 1)
-        if (!line) continue
+      const { lines, dropped, overflow } = this.lines.push(chunk)
+      if (dropped > 0)
+        this.handlers.onMessage({ type: 'console', level: 'warn', text: `${dropped} mensagem(ns) do runtime passaram do limite de ${MAX_MESSAGE_CHARS} caracteres e foram descartadas.` })
+      for (const line of lines) {
         try {
           const msg = JSON.parse(line) as PyMessage
           if (msg && typeof msg.type === 'string') this.handlers.onMessage(msg)
         } catch {
           this.handlers.onMessage({ type: 'console', level: 'warn', text: `Saída inesperada do runtime: ${line.slice(0, 200)}` })
         }
+      }
+      if (overflow) {
+        this.stderr += '\nO runtime enviou dados demais sem terminar uma mensagem; o processo foi encerrado.'
+        this.kill()
       }
     })
     proc.stderr.on('data', (chunk: string) => {
@@ -119,16 +122,33 @@ export class PythonHost {
 
   send(msg: object): void {
     if (this.exited || !this.proc?.stdin.writable) return
-    this.proc.stdin.write(JSON.stringify(msg) + '\n')
+    const text = JSON.stringify(msg)
+    if (text.length > MAX_MESSAGE_CHARS) {
+      this.handlers.onMessage({ type: 'console', level: 'error', text: `Mensagem para o Python grande demais (${text.length} caracteres); não foi enviada.` })
+      return
+    }
+    this.proc.stdin.write(text + '\n')
+  }
+
+  /**
+   * Mata o processo e os filhos dele. No Windows o lançador `py` abre o Python como processo filho: matar só o
+   * lançador deixaria o Python rodando (um laço infinito continuaria gastando CPU depois de "Parar").
+   */
+  kill(): void {
+    const proc = this.proc
+    if (!proc || proc.pid === undefined) return
+    if (process.platform === 'win32') execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true }, () => undefined)
+    else proc.kill('SIGKILL')
   }
 
   /** Pede o encerramento e, se o processo não sair logo (script preso num laço), o mata. */
-  stop(): void {
+  stop(force = false): void {
     const proc = this.proc
     if (!proc || this.exited) return
+    if (force) return this.kill() // travado: não adianta pedir com educação
     this.send({ type: 'shutdown' })
     proc.stdin.end()
-    const timer = setTimeout(() => proc.kill(), 1500)
+    const timer = setTimeout(() => this.kill(), 1500)
     proc.once('exit', () => clearTimeout(timer))
   }
 }
