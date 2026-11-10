@@ -129,6 +129,10 @@ export function MenuBar(): React.JSX.Element {
           onClick: () => void ide.setSetting('livePreview', !live)
         }
       ]
+    },
+    {
+      label: 'Ajuda',
+      items: [{ label: 'Dicionário de componentes', shortcut: 'F1', onClick: () => ide.openDictionary() }]
     }
   ]
 

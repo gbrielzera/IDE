@@ -8,6 +8,7 @@ import { OutlineTree } from './editor/OutlineTree'
 import { CanvasArea, preloadAndWarmCodeEditor } from './editor/CanvasArea'
 import { PropertyPanel } from './editor/PropertyPanel'
 import { ConsolePanel } from './editor/ConsolePanel'
+import { Dictionary } from './editor/Dictionary'
 import { StatusBar } from './editor/StatusBar'
 import { Welcome } from './editor/Welcome'
 
@@ -29,6 +30,11 @@ function useShortcuts(): void {
     function onKey(e: KeyboardEvent): void {
       if (e.altKey) return
       const ide = useIde.getState()
+      if (e.key === 'F1') {
+        e.preventDefault()
+        ide.dictionary ? ide.closeDictionary() : ide.openDictionary()
+        return
+      }
       if (e.key === 'F5') {
         e.preventDefault()
         void (e.shiftKey ? ide.stop() : ide.run())
@@ -201,6 +207,7 @@ export function App(): React.JSX.Element {
         </Group>
       </div>
       <StatusBar />
+      <Dictionary />
     </div>
   )
 }

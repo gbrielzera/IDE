@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { PROJECT_FILE, type FormDocument, type LoadedProject } from '@shared/project'
 import { alignNodes, canAlign, canDistribute, distributeNodes, type AlignMode, type Axis } from './core/align'
 import { clampRect, contentSize } from './core/bounds'
-import { CATALOG_BY_TYPE } from './components/catalog'
+import { CATALOG, CATALOG_BY_TYPE } from './components/catalog'
 import {
   addNode,
   createNode,
@@ -32,6 +32,8 @@ import type { FormNode } from '@shared/project'
 import { buildRunComponents } from './core/runstate'
 import { renameInScript } from './core/refactor'
 import { ensureHandler, eventForDoubleClick } from './core/script'
+import type { Topic } from './core/glossary'
+import { typeOfId } from './core/pyapi'
 import { NO_PREVIEW_WINDOW, type RunConsoleMessage, type RunEnded } from '@shared/run'
 import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
 
@@ -43,6 +45,19 @@ export interface ConsoleLine {
   level: LogLevel
   text: string
   /** Erros de execução do script: linha e arquivo, para pular até o código ao clicar. */
+  line?: number
+  file?: string
+}
+
+/** Registro permanente (aba Logs): guarda data completa e a execução de origem; "limpar" do console não o apaga. */
+export interface LogEntry {
+  id: number
+  /** ISO 8601, para mostrar data e hora. */
+  at: string
+  level: LogLevel
+  text: string
+  /** Número da execução (1, 2, ...) em que ocorreu, ou null se foi fora de uma execução. */
+  run: number | null
   line?: number
   file?: string
 }
@@ -60,6 +75,10 @@ interface IdeState {
   dirty: boolean
   busy: boolean
   console: ConsoleLine[]
+  logs: LogEntry[]
+  /** Execução em andamento (para etiquetar os logs), ou null. */
+  logRun: number | null
+  runCounter: number
   /** Documento + histórico de cada formulário que carregou sem erro. */
   tracked: Record<string, Tracked>
   /** IDs dos componentes selecionados no formulário ativo. */
@@ -108,6 +127,11 @@ interface IdeState {
   openTab(form: string, view: View): void
   log(level: LogLevel, text: string, meta?: { line?: number; file?: string }): void
   clearConsole(): void
+  clearLogs(): void
+  /** Dicionário aberto (página atual) ou null. Sem argumento, abre no componente selecionado ou no primeiro. */
+  dictionary: Topic | null
+  openDictionary(topic?: Topic): void
+  closeDictionary(): void
 
   currentDoc(): FormDocument | null
   select(ids: string[]): void
@@ -249,6 +273,9 @@ export const useIde = create<IdeState>((set, get) => {
     dirty: false,
     busy: false,
     console: [],
+    logs: [],
+    logRun: null,
+    runCounter: 0,
     tracked: {},
     selection: [],
     running: false,
@@ -318,14 +345,29 @@ export const useIde = create<IdeState>((set, get) => {
       set((s) => ({ activeForm: form, activeView: view, selection: form === s.activeForm ? s.selection : [] })),
 
     log: (level, text, meta) =>
-      set((s) => ({
-        console: [
-          ...s.console.slice(-499),
-          { id: nextLineId++, time: now(), level, text, line: meta?.line, file: meta?.file }
-        ]
-      })),
+      set((s) => {
+        const id = nextLineId++
+        return {
+          console: [...s.console.slice(-499), { id, time: now(), level, text, line: meta?.line, file: meta?.file }],
+          logs: [
+            ...s.logs.slice(-1999),
+            { id, at: new Date().toISOString(), level, text, run: s.logRun, line: meta?.line, file: meta?.file }
+          ]
+        }
+      }),
 
     clearConsole: () => set({ console: [] }),
+    clearLogs: () => set({ logs: [] }),
+
+    dictionary: null,
+    openDictionary(topic) {
+      if (topic) return set({ dictionary: topic })
+      const { selection } = get()
+      const doc = get().currentDoc()
+      const first = doc && selection.length === 1 ? typeOfId(doc, selection[0]) : null
+      set({ dictionary: { kind: 'component', type: first ?? CATALOG[0].type } })
+    },
+    closeDictionary: () => set({ dictionary: null }),
 
     currentDoc() {
       const { activeForm, tracked } = get()
@@ -418,7 +460,9 @@ export const useIde = create<IdeState>((set, get) => {
         get().log('error', 'O formulário ativo não pôde ser lido; corrija o arquivo para executar.')
         return
       }
-      set({ runErrors: {} })
+      const logRun = refresh && get().logRun !== null ? get().logRun : get().runCounter + 1
+      set({ runErrors: {}, logRun, runCounter: Math.max(get().runCounter, logRun!) })
+      if (!refresh) get().log('info', `Execução ${logRun} iniciada (${form.name}).`)
       const res = await window.vform.run.start({
         reuse: refresh,
         // Com a pré-visualização ao vivo ligada, a janela nova abre ao lado da IDE.
@@ -431,7 +475,10 @@ export const useIde = create<IdeState>((set, get) => {
         components: buildRunComponents(t.doc)
       })
       if (res.ok) set({ running: true, runId: res.runId, runForm: form.name })
-      else if (!(refresh && res.error === NO_PREVIEW_WINDOW)) get().log('error', res.error)
+      else {
+        if (!(refresh && res.error === NO_PREVIEW_WINDOW)) get().log('error', res.error)
+        if (!get().running) set({ logRun: null })
+      }
     },
 
     async stop() {
@@ -442,6 +489,7 @@ export const useIde = create<IdeState>((set, get) => {
       if (ended.runId !== get().runId) return // aviso de uma execução antiga (já substituída)
       set({ running: false, runId: null, runForm: null })
       if (ended.reason !== 'crashed') get().log('info', 'Execução encerrada.')
+      set({ logRun: null })
     },
 
     runConsole(msg) {

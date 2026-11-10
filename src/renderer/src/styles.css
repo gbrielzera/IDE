@@ -1268,3 +1268,173 @@ body:has(.fatal-error) {
 .design-wrap.placed {
   margin: 0;
 }
+
+/* ---------- Abas Console/Logs ---------- */
+.tabs-mini,
+.log-filters {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.log-filters {
+  margin-left: auto;
+  margin-right: 8px;
+}
+.tabs-mini button,
+.log-filters button {
+  min-height: 0;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.tabs-mini button.on,
+.log-filters button.on {
+  background: var(--sel-bg);
+  color: var(--sel-text);
+}
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log-line.warn {
+  color: var(--warn);
+}
+.log-line.error {
+  color: var(--error);
+}
+.log-line.clickable {
+  cursor: pointer;
+}
+.log-line.clickable:hover {
+  background: var(--sel-bg);
+  color: var(--sel-text);
+}
+.log-level {
+  display: inline-block;
+  min-width: 44px;
+  font-weight: bold;
+  margin-right: 6px;
+}
+.log-run {
+  display: inline-block;
+  min-width: 52px;
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+.log-where {
+  color: var(--text-muted);
+}
+/* ---------- Prévia ao passar o cursor e dicionário ---------- */
+.hover-card {
+  position: fixed;
+  z-index: 60;
+  width: 250px;
+  padding: 8px 10px;
+  background: var(--face);
+  color: var(--text);
+  border: 1px solid var(--dkshadow);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  pointer-events: none;
+}
+.hover-card p {
+  margin: 6px 0 2px;
+}
+.hover-card small {
+  display: block;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.hover-preview,
+.dict-preview {
+  margin: 6px 0;
+  overflow: hidden;
+}
+.preview-surface {
+  display: inline-block;
+  padding: 6px;
+  max-width: 100%;
+}
+.dict-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dict {
+  width: min(860px, 92vw);
+  height: min(560px, 86vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  color: var(--text);
+  border: 1px solid var(--dkshadow);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+}
+.dict-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--dkshadow);
+}
+.dict-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.dict-index {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  width: 210px;
+  overflow: auto;
+  border-right: 1px solid var(--dkshadow);
+}
+.dict-index button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  box-shadow: none;
+  background: none;
+  min-height: 0;
+  padding: 2px 8px;
+}
+.dict-index button.on {
+  background: var(--sel-bg);
+  color: var(--sel-text);
+}
+.dict-group {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dict-page {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 16px;
+  user-select: text;
+}
+.dict-page h3 {
+  margin: 4px 0 8px;
+}
+.dict-page h4 {
+  margin: 14px 0 4px;
+}
+.dict-code {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--paper);
+  border: 1px solid var(--dkshadow);
+  font-family: 'Lucida Console', Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.dict-list {
+  margin: 0;
+  padding-left: 18px;
+}
