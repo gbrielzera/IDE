@@ -26,6 +26,7 @@ const api: VformApi = {
     init: () => ipcRenderer.invoke('run:init'),
     ready: () => ipcRenderer.send('run:ready'),
     send: (msg) => ipcRenderer.send('run:send', msg),
+    openUrl: (url) => ipcRenderer.send('run:open-url', url),
     onMessage: (cb) => subscribe('run:message', cb),
     onReload: (cb) => subscribe('run:reload', cb)
   }

@@ -27,6 +27,13 @@ def comps() -> dict:
         "chk": {"type": "CheckBox", "props": {**COMMON, "text": "ok", "checked": False}},
         "tbl": {"type": "Table", "props": {**COMMON, "columns": ["a", "b"], "rows": [], "selectedIndex": -1}},
         "lst": {"type": "ListBox", "props": {**COMMON, "items": ["a", "b", "c"], "selectedIndex": -1}},
+        "num": {"type": "NumericField", "props": {**COMMON, "value": 5, "minValue": 0, "maxValue": 10, "step": 2, "decimals": 0, "readOnly": False}},
+        "sld": {"type": "Slider", "props": {**COMMON, "value": 50, "minValue": 0, "maxValue": 100, "step": 0.1, "showValue": False}},
+        "pb": {"type": "ProgressBar", "props": {**COMMON, "value": 40, "minValue": 0, "maxValue": 100, "indeterminate": False, "showLabel": False}},
+        "sw": {"type": "ToggleSwitch", "props": {**COMMON, "text": "x", "checked": False}},
+        "dt": {"type": "DatePicker", "props": {**COMMON, "value": "2020-01-01", "minDate": "", "maxDate": ""}},
+        "pwd": {"type": "PasswordField", "props": {**COMMON, "value": "abc", "placeholder": "", "showToggle": False, "readOnly": False, "revealed": False}},
+        "lnk": {"type": "Link", "props": {**COMMON, "text": "site", "url": "https://exemplo.org/"}},
     }
 
 
@@ -285,7 +292,7 @@ class ErrorsTest(unittest.TestCase):
         h.load("""
             nome = "txtNome"
             form[nome].value = "via colchetes"
-            assert "btnOk" in form and "x" not in form and len(form) == 7
+            assert "btnOk" in form and "x" not in form and len(form) == 14
         """)
         self.assertEqual(h.errors(), [])
         self.assertEqual(h.of("patch")[0]["changes"][0]["value"], "via colchetes")
@@ -605,3 +612,85 @@ class CommonApiTest(unittest.TestCase):
         h.clear()
         h.event("cbUF", "change")  # o runtime segue vivo
         self.assertEqual(h.errors(), [])
+
+
+class V03ComponentsTest(unittest.TestCase):
+    def last(self, h: Harness) -> dict:
+        return {(c["id"], c["prop"]): c["value"] for m in h.of("patch") for c in m["changes"]}
+
+    def test_numeric_incrementa_pelo_passo_e_respeita_a_faixa(self) -> None:
+        h = Harness()
+        h.load("""
+            form.num.increment()
+            form.num.increment()
+            form.num.increment()
+            form.num.increment()
+        """)
+        self.assertEqual(self.last(h)[("num", "value")], 10)  # 5 → 7 → 9 → 10 (máximo)
+        h = Harness()
+        h.load("form.num.decrement(100)")
+        self.assertEqual(self.last(h)[("num", "value")], 0)
+
+    def test_set_range_ajusta_o_valor_e_valida(self) -> None:
+        h = Harness()
+        h.load("form.num.set_range(6, 8)")
+        self.assertEqual(self.last(h), {("num", "minValue"): 6, ("num", "maxValue"): 8, ("num", "value"): 6})
+        h = Harness()
+        h.load("form.num.set_range(9, 1)")
+        self.assertIn("não pode ser maior", h.errors()[0]["text"])
+
+    def test_slider_com_passo_decimal_nao_acumula_erro_de_ponto_flutuante(self) -> None:
+        h = Harness()
+        h.load("""
+            form.sld.value = 0.1
+            form.sld.increment()
+            form.sld.increment()
+        """)
+        self.assertEqual(self.last(h)[("sld", "value")], 0.3)
+
+    def test_progressbar_incrementa_um_por_padrao_ou_o_que_for_pedido(self) -> None:
+        h = Harness()
+        h.load("form.pb.increment(25)")
+        self.assertEqual(self.last(h)[("pb", "value")], 65)
+        h = Harness()
+        h.load("form.pb.decrement()")  # barra de progresso não tem decrement
+        self.assertIn("não tem o método 'decrement'", h.errors()[0]["text"])
+
+    def test_interruptor(self) -> None:
+        h = Harness()
+        h.load("""
+            form.sw.toggle()
+            form.sw.turn_off()
+            form.sw.turn_on()
+        """)
+        self.assertEqual(self.last(h)[("sw", "checked")], True)
+
+    def test_data_de_hoje_e_limpar(self) -> None:
+        import datetime
+
+        h = Harness()
+        h.load("form.dt.set_today()")
+        self.assertEqual(self.last(h)[("dt", "value")], datetime.date.today().isoformat())
+        h = Harness()
+        h.load("form.dt.clear()")
+        self.assertEqual(self.last(h)[("dt", "value")], "")
+
+    def test_senha_mostrar_esconder_limpar_e_apelido_text(self) -> None:
+        h = Harness()
+        h.load("""
+            form.pwd.show_password()
+            assert form.pwd.text == "abc"
+            form.pwd.clear()
+        """)
+        self.assertEqual(self.last(h), {("pwd", "revealed"): True, ("pwd", "value"): ""})
+        self.assertEqual(h.errors(), [])
+
+    def test_link_open_pede_a_ide_para_abrir(self) -> None:
+        h = Harness()
+        h.load("form.lnk.open()")
+        self.assertEqual(h.of("open_url"), [{"type": "open_url", "url": "https://exemplo.org/"}])
+
+    def test_clear_de_lista_continua_funcionando(self) -> None:
+        h = Harness()
+        h.load("form.lst.clear()")
+        self.assertEqual(self.last(h)[("lst", "items")], [])

@@ -8,6 +8,9 @@ import { DRAG_MIME } from './DesignSurface'
 /** Quanto o cursor precisa ficar parado sobre o item antes da prévia aparecer. */
 export const HOVER_PREVIEW_MS = 800
 
+/** Categorias na ordem em que aparecem no registro. */
+const CATEGORIES = [...new Set(CATALOG.map((c) => c.category))]
+
 interface Hover {
   type: string
   x: number
@@ -45,25 +48,32 @@ export function Palette(): React.JSX.Element {
     <section className="pane">
       <h2 className="pane-title">Componentes</h2>
       <ul className="pane-body palette">
-        {CATALOG.map((c) => (
-          <li
-            key={c.type}
-            className="palette-item"
-            draggable={hasProject}
-            onMouseEnter={(e) => startHover(c.type, e.currentTarget)}
-            onMouseLeave={stopHover}
-            onMouseDown={stopHover}
-            onDragStart={(e) => {
-              stopHover()
-              e.dataTransfer.setData(DRAG_MIME, c.type)
-              e.dataTransfer.effectAllowed = 'copy'
-            }}
-            onDoubleClick={() => {
-              stopHover()
-              addAtCascade(c.type)
-            }}
-          >
-            {c.label}
+        {CATEGORIES.map((category) => (
+          <li key={category} className="palette-group">
+            <span className="palette-category">{category}</span>
+            <ul>
+              {CATALOG.filter((c) => c.category === category).map((c) => (
+              <li
+                key={c.type}
+                className="palette-item"
+                draggable={hasProject}
+                onMouseEnter={(e) => startHover(c.type, e.currentTarget)}
+                onMouseLeave={stopHover}
+                onMouseDown={stopHover}
+                onDragStart={(e) => {
+                  stopHover()
+                  e.dataTransfer.setData(DRAG_MIME, c.type)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onDoubleClick={() => {
+                  stopHover()
+                  addAtCascade(c.type)
+                }}
+              >
+                {c.label}
+              </li>
+              ))}
+            </ul>
           </li>
         ))}
       </ul>

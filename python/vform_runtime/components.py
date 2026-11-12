@@ -237,6 +237,85 @@ class Component:
         for key, value in defaults(self._type).items():
             self._set(key, value)
 
+    # ----- números (NumericField, Slider, ProgressBar) -----
+    def _range(self) -> tuple[float, float]:
+        low = self._props.get("minValue", 0)
+        high = self._props.get("maxValue", 100)
+        low = low if isinstance(low, (int, float)) and not isinstance(low, bool) else 0
+        high = high if isinstance(high, (int, float)) and not isinstance(high, bool) else 100
+        return low, max(low, high)
+
+    def _set_number(self, value: float) -> None:
+        low, high = self._range()
+        value = min(high, max(low, value))
+        decimals = self._props.get("decimals")
+        if isinstance(decimals, int) and not isinstance(decimals, bool):
+            value = round(value, max(0, min(6, decimals)))
+        elif isinstance(value, float):
+            value = round(value, 6)  # sem "0.30000000000000004"
+        self._set("value", int(value) if float(value).is_integer() else value)
+
+    def _current(self) -> float:
+        value = self._props.get("value", 0)
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+    def _amount(self, amount: Any) -> float:
+        if amount is None:
+            step = self._props.get("step", 1)
+            return step if isinstance(step, (int, float)) and not isinstance(step, bool) and step > 0 else 1
+        return self._number(amount, "quanto")
+
+    def increment(self, amount: Any = None) -> None:
+        self._require("increment")
+        self._set_number(self._current() + self._amount(amount))
+
+    def decrement(self, amount: Any = None) -> None:
+        self._require("decrement")
+        self._set_number(self._current() - self._amount(amount))
+
+    def set_range(self, minimum: Any, maximum: Any) -> None:
+        self._require("set_range")
+        low, high = self._number(minimum, "mínimo"), self._number(maximum, "máximo")
+        if low > high:
+            raise ValueError(f"o mínimo ({low}) não pode ser maior que o máximo ({high}).")
+        self._set("minValue", low)
+        self._set("maxValue", high)
+        self._set_number(self._current())  # o valor atual passa a caber na faixa nova
+
+    # ----- liga/desliga (ToggleSwitch) -----
+    def toggle(self) -> None:
+        self._require("toggle")
+        self._set("checked", not bool(self._props.get("checked")))
+
+    def turn_on(self) -> None:
+        self._require("turn_on")
+        self._set("checked", True)
+
+    def turn_off(self) -> None:
+        self._require("turn_off")
+        self._set("checked", False)
+
+    # ----- data, senha e link -----
+    def set_today(self) -> None:
+        self._require("set_today")
+        import datetime
+
+        self._set("value", datetime.date.today().isoformat())
+
+    def show_password(self) -> None:
+        self._require("show_password")
+        self._set("revealed", True)
+
+    def hide_password(self) -> None:
+        self._require("hide_password")
+        self._set("revealed", False)
+
+    def open(self) -> None:
+        """Abre o endereço do link no navegador. A IDE só aceita http, https e mailto."""
+        self._require("open")
+        self._runtime.flush()
+        self._runtime.send({"type": "open_url", "url": str(self._props.get("url", ""))})
+
     # ----- métodos de listas (ComboBox, ListBox, RadioGroup, Tabs, Table) -----
     def _require(self, method: str) -> None:
         """O registro diz quais métodos cada tipo tem: os outros dão um erro claro."""
@@ -280,7 +359,11 @@ class Component:
         self._fix_selection(index if index >= 0 else len(items) + 1 + index)
 
     def clear(self) -> None:
+        """Listas e tabelas: remove todos os itens. Campos: esvazia o valor."""
         self._require("clear")
+        if not any(k in self._props for k in ("items", "tabs", "rows")):
+            self._set("value", "")
+            return
         key = self._items_key()
         self._set(key, [])
         if "selectedIndex" in self._props:

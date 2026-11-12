@@ -4,6 +4,7 @@ import type { RunChange, RunComponent, RunInit } from '@shared/run'
 import { childBoxStyle, childrenLayerStyle } from '../components/layoutStyle'
 import { appearanceStyle } from '../components/render'
 import { activeTab, layoutOf } from '../core/props'
+import { clamp, formatNumber, num, percentOf, rangeOf, safeUrl } from '../components/numeric'
 
 /** Propriedades atuais de cada componente: o "espelho" que a janela mostra. */
 type RunState = Record<string, Record<string, unknown>>
@@ -201,9 +202,173 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
         </div>
       )
     }
+    case 'NumericField': {
+      const { min, max } = rangeOf(p)
+      const step = num(p.step, 1) > 0 ? num(p.step, 1) : 1
+      const set = (raw: number): void => {
+        const d = clamp(Math.round(num(p.decimals, 0)), 0, 6)
+        const value = Number(clamp(raw, min, max).toFixed(d))
+        if (value !== p.value) change(id, 'value', value, { name: 'change', args: { value } })
+      }
+      return <NumberInput text={formatNumber(p.value, p.decimals)} min={min} max={max} step={step} disabled={disabled} readOnly={p.readOnly === true} onCommit={set} />
+    }
+    case 'PasswordField':
+      return (
+        <div className="r-password">
+          <input
+            className="r-input"
+            type={p.revealed === true ? 'text' : 'password'}
+            value={str(p.value)}
+            placeholder={str(p.placeholder)}
+            readOnly={p.readOnly === true}
+            disabled={disabled}
+            autoComplete="off"
+            onChange={(e) => change(id, 'value', e.target.value, { name: 'change', args: {} })}
+          />
+          {p.showToggle === true && (
+            <button className="r-button r-eye" disabled={disabled} title={p.revealed === true ? 'Esconder' : 'Mostrar'} onClick={() => change(id, 'revealed', p.revealed !== true)}>
+              {p.revealed === true ? '🙈' : '👁'}
+            </button>
+          )}
+        </div>
+      )
+    case 'DatePicker':
+      return (
+        <input
+          className="r-input"
+          type="date"
+          value={str(p.value)}
+          min={str(p.minDate) || undefined}
+          max={str(p.maxDate) || undefined}
+          disabled={disabled}
+          onChange={(e) => change(id, 'value', e.target.value, { name: 'change', args: { value: e.target.value } })}
+        />
+      )
+    case 'Slider': {
+      const { min, max } = rangeOf(p)
+      return (
+        <div className="r-slider">
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={num(p.step, 1) > 0 ? num(p.step, 1) : 1}
+            value={clamp(num(p.value), min, max)}
+            disabled={disabled}
+            onChange={(e) => {
+              const value = Number(e.target.value)
+              change(id, 'value', value, { name: 'change', args: { value } })
+            }}
+          />
+          {p.showValue === true && <span className="r-slider-value">{String(p.value ?? '')}</span>}
+        </div>
+      )
+    }
+    case 'ToggleSwitch':
+      return (
+        <label className="r-check r-toggle">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={p.checked === true}
+            disabled={disabled}
+            onChange={(e) => change(id, 'checked', e.target.checked, { name: 'change', args: { checked: e.target.checked } })}
+          />
+          <span className={`r-switch${p.checked === true ? ' on' : ''}`} />
+          {str(p.text)}
+        </label>
+      )
+    case 'ProgressBar':
+      return (
+        <div
+          className={`r-progress${p.indeterminate === true ? ' indeterminate' : ''}`}
+          role="progressbar"
+          aria-valuemin={rangeOf(p).min}
+          aria-valuemax={rangeOf(p).max}
+          aria-valuenow={p.indeterminate === true ? undefined : clamp(num(p.value), rangeOf(p).min, rangeOf(p).max)}
+          onClick={click}
+        >
+          <div className="r-progress-fill" style={p.indeterminate === true ? undefined : { width: `${percentOf(p)}%` }} />
+          {p.showLabel === true && p.indeterminate !== true && <span className="r-progress-label">{percentOf(p)}%</span>}
+        </div>
+      )
+    case 'Alert':
+      return (
+        <div className={`r-alert v-${str(p.variant) || 'info'}`} role="alert" onClick={click}>
+          {str(p.title) && <b>{str(p.title)}</b>}
+          <span>{str(p.text)}</span>
+        </div>
+      )
+    case 'Link':
+      return (
+        <a
+          className={`r-link${disabled ? ' is-disabled' : ''}`}
+          href={safeUrl(p.url) ?? '#'}
+          tabIndex={disabled ? -1 : 0}
+          onClick={(e) => {
+            e.preventDefault() // quem abre é o processo principal, depois de validar o endereço
+            e.stopPropagation()
+            if (disabled) return
+            if (str(p.url)) window.vform.run.openUrl(str(p.url))
+            fire(id, 'click')
+          }}
+        >
+          {str(p.text)}
+        </a>
+      )
+    case 'Card':
+      return (
+        <div className="r-card" onClick={click}>
+          <div className="r-card-head">
+            <b>{str(p.title)}</b>
+            {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+          </div>
+        </div>
+      )
+    case 'GroupBox':
+      return (
+        <div className="r-group" onClick={click}>
+          <span className="r-group-title">{str(p.title)}</span>
+        </div>
+      )
     default:
       return <div className="r-unknown">? {node.type}</div>
   }
+}
+
+/**
+ * Campo numérico: o texto fica livre enquanto se digita (dá para apagar e escrever "-") e só vira número,
+ * já dentro da faixa, ao sair do campo, apertar Enter ou usar as setinhas.
+ */
+function NumberInput(props: { text: string; min: number; max: number; step: number; disabled: boolean; readOnly: boolean; onCommit(value: number): void }): React.JSX.Element {
+  const [text, setText] = useState(props.text)
+  useEffect(() => setText(props.text), [props.text]) // o valor mudou por fora (script, setinhas): mostra o novo
+  const commit = (raw: string): void => {
+    const value = Number(raw.replace(',', '.'))
+    if (raw.trim() === '' || !Number.isFinite(value)) setText(props.text)
+    else props.onCommit(value)
+  }
+  return (
+    <input
+      className="r-input r-number"
+      type="number"
+      inputMode="decimal"
+      value={text}
+      min={props.min}
+      max={props.max}
+      step={props.step}
+      disabled={props.disabled}
+      readOnly={props.readOnly}
+      onChange={(e) => {
+        setText(e.target.value)
+        // Setinhas e roda do mouse mudam o valor sem o campo "sair": confirma na hora.
+        const native = e.nativeEvent as InputEvent
+        if (native.inputType === undefined || native.inputType === 'insertReplacementText') commit(e.target.value)
+      }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && commit((e.target as HTMLInputElement).value)}
+    />
+  )
 }
 
 function RunNode({ node, parent }: { node: FormNode; parent: FormNode | null }): React.JSX.Element | null {

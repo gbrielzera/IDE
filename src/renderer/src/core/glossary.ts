@@ -211,6 +211,7 @@ export const NOVIDADES: Novidade[] = [
   {
     titulo: 'Versão atual',
     itens: [
+      'Dez componentes novos: NumericField, PasswordField, DatePicker, Slider, ToggleSwitch, ProgressBar, Alert, Link, Card e GroupBox. A lista de componentes agora é agrupada por categoria.',
       'API comum de componentes: show/hide, enable/disable, focus/blur, set_tooltip, set_position, set_size e reset, declaradas no registro por tipo.',
       'Identidade estável: cada componente tem um uid interno; renomear o ID mantém seleção, histórico e a tela. Projetos antigos são atualizados (com cópia .bak).',
       'Component Registry: os componentes (propriedades, eventos, ações e ajuda) vêm de um único arquivo, lido pela IDE e pelo Python.',

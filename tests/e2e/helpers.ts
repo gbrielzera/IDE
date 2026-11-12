@@ -110,6 +110,7 @@ export class Studio {
    */
   async dropFrom(type: string, target: Locator, pos: Point): Promise<void> {
     const { page } = this
+    await this.palette(type).scrollIntoViewIfNeeded() // a lista de componentes rola: o item pode estar fora da vista
     const src = (await this.palette(type).boundingBox())!
     const dst = (await target.boundingBox())!
     const to = { x: dst.x + pos.x, y: dst.y + pos.y }

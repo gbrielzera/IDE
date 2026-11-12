@@ -87,6 +87,8 @@ export interface RunApi {
   init(): Promise<RunInit | null>
   ready(): void
   send(msg: RunToPython): void
+  /** Pede ao processo principal que abra um endereço no navegador (ele valida: só http, https e mailto). */
+  openUrl(url: string): void
   onMessage(cb: (msg: RunFromPython) => void): () => void
   /** A IDE atualizou o formulário/script: busque os dados de novo (`init`) e avise com `ready`. */
   onReload(cb: () => void): () => void

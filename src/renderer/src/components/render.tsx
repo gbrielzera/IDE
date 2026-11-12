@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { FormNode } from '@shared/project'
 import { activeTab } from '../core/props'
+import { formatNumber, percentOf } from './numeric'
 
 function strings(v: unknown): string[] {
   return Array.isArray(v) ? v.map(String) : []
@@ -108,6 +109,73 @@ export function renderContent(node: FormNode): ReactNode {
               <span key={i}>{c}</span>
             ))}
           </div>
+        </div>
+      )
+    case 'NumericField':
+      return (
+        <div className="cmp cmp-input cmp-combo">
+          <span>{formatNumber(p.value, p.decimals)}</span>
+          <span className="cmp-caret">▴▾</span>
+        </div>
+      )
+    case 'PasswordField':
+      return (
+        <div className="cmp cmp-input">
+          {str(p.value) ? '•'.repeat(Math.min(str(p.value).length, 24)) : <span className="cmp-placeholder">{str(p.placeholder)}</span>}
+        </div>
+      )
+    case 'DatePicker':
+      return (
+        <div className="cmp cmp-input cmp-combo">
+          <span>{str(p.value) || <span className="cmp-placeholder">dd/mm/aaaa</span>}</span>
+          <span className="cmp-caret">▦</span>
+        </div>
+      )
+    case 'Slider':
+      return (
+        <div className="cmp cmp-slider">
+          <div className="cmp-track">
+            <div className="cmp-thumb" style={{ left: `${percentOf(p)}%` }} />
+          </div>
+          {p.showValue === true && <span className="cmp-slider-value">{String(p.value ?? '')}</span>}
+        </div>
+      )
+    case 'ToggleSwitch':
+      return (
+        <div className="cmp cmp-check">
+          <span className={`cmp-switch${p.checked ? ' on' : ''}`} />
+          {str(p.text)}
+        </div>
+      )
+    case 'ProgressBar':
+      return (
+        <div className="cmp cmp-progress">
+          <div className="cmp-progress-fill" style={{ width: p.indeterminate === true ? '35%' : `${percentOf(p)}%` }} />
+          {p.showLabel === true && p.indeterminate !== true && <span className="cmp-progress-label">{percentOf(p)}%</span>}
+        </div>
+      )
+    case 'Alert':
+      return (
+        <div className={`cmp cmp-alert v-${str(p.variant) || 'info'}`}>
+          {str(p.title) && <b>{str(p.title)}</b>}
+          <span>{str(p.text)}</span>
+        </div>
+      )
+    case 'Link':
+      return <div className="cmp cmp-link">{str(p.text)}</div>
+    case 'Card':
+      return (
+        <div className="cmp cmp-card">
+          <div className="cmp-card-head">
+            <b>{str(p.title)}</b>
+            {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+          </div>
+        </div>
+      )
+    case 'GroupBox':
+      return (
+        <div className="cmp cmp-group">
+          <span className="cmp-group-title">{str(p.title)}</span>
         </div>
       )
     default:

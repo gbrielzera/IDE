@@ -1486,3 +1486,256 @@ body:has(.fatal-error) {
 .tab-add {
   margin-left: 6px;
 }
+
+/* ---------- Componentes da V0.3 (editor) ---------- */
+.cmp-slider,
+.r-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-bg, transparent);
+}
+.cmp-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  background: var(--f-sh);
+  border: 1px solid var(--f-dk);
+}
+.cmp-thumb {
+  position: absolute;
+  top: -7px;
+  width: 10px;
+  height: 16px;
+  margin-left: -5px;
+  background: var(--f-face);
+  border: 1px solid var(--f-dk);
+}
+.cmp-switch,
+.r-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 14px;
+  margin-right: 6px;
+  background: var(--f-sh);
+  border: 1px solid var(--f-dk);
+  border-radius: 8px;
+}
+.cmp-switch::after,
+.r-switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1px solid var(--f-dk);
+  border-radius: 50%;
+  transition: left 0.12s;
+}
+.cmp-switch.on,
+.r-switch.on {
+  background: #41618a;
+}
+.cmp-switch.on::after,
+.r-switch.on::after {
+  left: 17px;
+}
+.cmp-progress,
+.r-progress {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--c-bg, #fff);
+  border: 1px solid;
+  border-color: var(--f-sh) var(--f-hl) var(--f-hl) var(--f-sh);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.cmp-progress-fill,
+.r-progress-fill {
+  height: 100%;
+  background: #41618a;
+}
+.cmp-progress-label,
+.r-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--c-color, var(--f-text));
+  mix-blend-mode: difference;
+  filter: invert(1);
+}
+.r-progress.indeterminate .r-progress-fill {
+  width: 35%;
+  animation: r-indeterminate 1.2s linear infinite;
+}
+@keyframes r-indeterminate {
+  from {
+    margin-left: -35%;
+  }
+  to {
+    margin-left: 100%;
+  }
+}
+.cmp-alert,
+.r-alert {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-left-width: 5px;
+  overflow: hidden;
+  font-size: var(--c-size, 12px);
+  color: var(--c-color, #25251f);
+}
+.cmp-alert.v-info,
+.r-alert.v-info {
+  background: var(--c-bg, #e3edf8);
+  border-color: #41618a;
+}
+.cmp-alert.v-success,
+.r-alert.v-success {
+  background: var(--c-bg, #e4f3e3);
+  border-color: #2e7d32;
+}
+.cmp-alert.v-warning,
+.r-alert.v-warning {
+  background: var(--c-bg, #fbf1d7);
+  border-color: #a06a00;
+}
+.cmp-alert.v-error,
+.r-alert.v-error {
+  background: var(--c-bg, #fbe3e1);
+  border-color: #b3261e;
+}
+.cmp-link,
+.r-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--c-color, #1a4fa0);
+  text-decoration: underline;
+  background: var(--c-bg, transparent);
+  font-size: var(--c-size, 12px);
+  font-weight: var(--c-weight, 400);
+  font-style: var(--c-style, normal);
+  cursor: pointer;
+}
+.r-link.is-disabled {
+  color: var(--f-sh);
+  cursor: default;
+}
+.cmp-card,
+.r-card {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--c-bg, #fff);
+  border: 1px solid var(--f-sh);
+  box-shadow: 1px 1px 0 var(--f-sh);
+}
+.cmp-card-head,
+.r-card-head {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 43px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--f-sh);
+  overflow: hidden;
+  color: var(--c-color, var(--f-text));
+}
+.cmp-card-head small,
+.r-card-head small {
+  color: var(--f-dk);
+}
+.cmp-group,
+.r-group {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  border: 1px solid var(--f-sh);
+  border-top: none;
+  background:
+    linear-gradient(var(--f-sh), var(--f-sh)) left 0 top 8px / 100% 1px no-repeat,
+    var(--c-bg, transparent);
+}
+.cmp-group-title,
+.r-group-title {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  padding: 0 4px;
+  line-height: 16px;
+  background: var(--c-bg, var(--f-face));
+  color: var(--c-color, var(--f-text));
+  font-size: var(--c-size, 12px);
+}
+/* ---------- Componentes da V0.3 (execução) ---------- */
+.r-password {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+.r-password .r-input {
+  flex: 1;
+  min-width: 0;
+}
+.r-eye {
+  flex: none;
+  width: 28px;
+  padding: 0;
+}
+.r-slider input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.r-slider {
+  width: 100%;
+  height: 100%;
+}
+.r-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 30px;
+  height: 14px;
+  margin: 0;
+}
+.r-toggle input:focus-visible + .r-switch {
+  outline: 2px solid #41618a;
+  outline-offset: 1px;
+}
+
+/* ---------- Paleta agrupada por categoria ---------- */
+.palette-group {
+  list-style: none;
+}
+.palette-group > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.palette-category {
+  display: block;
+  margin: 6px 0 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}

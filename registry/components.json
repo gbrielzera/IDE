@@ -71,7 +71,7 @@
     },
     "clear": {
       "detail": "clear()",
-      "doc": "Remove todos os itens e limpa a seleção.",
+      "doc": "Limpa: remove todos os itens (listas e tabelas) ou esvazia o valor (campos).",
       "insert": "clear()"
     },
     "add_row": {
@@ -138,6 +138,56 @@
       "detail": "reset()",
       "doc": "Volta as propriedades do componente aos valores padrão (posição e tamanho não mudam).",
       "insert": "reset()"
+    },
+    "increment": {
+      "detail": "increment(quanto=None)",
+      "doc": "Soma ao valor (por padrão, o passo do componente), sem passar do máximo.",
+      "insert": "increment()"
+    },
+    "decrement": {
+      "detail": "decrement(quanto=None)",
+      "doc": "Subtrai do valor (por padrão, o passo do componente), sem passar do mínimo.",
+      "insert": "decrement()"
+    },
+    "set_range": {
+      "detail": "set_range(mínimo, máximo)",
+      "doc": "Define o menor e o maior valor aceitos; o valor atual é ajustado para caber.",
+      "insert": "set_range($0)"
+    },
+    "toggle": {
+      "detail": "toggle()",
+      "doc": "Inverte: ligado vira desligado e vice-versa.",
+      "insert": "toggle()"
+    },
+    "turn_on": {
+      "detail": "turn_on()",
+      "doc": "Liga o interruptor.",
+      "insert": "turn_on()"
+    },
+    "turn_off": {
+      "detail": "turn_off()",
+      "doc": "Desliga o interruptor.",
+      "insert": "turn_off()"
+    },
+    "set_today": {
+      "detail": "set_today()",
+      "doc": "Coloca a data de hoje.",
+      "insert": "set_today()"
+    },
+    "show_password": {
+      "detail": "show_password()",
+      "doc": "Mostra os caracteres da senha.",
+      "insert": "show_password()"
+    },
+    "hide_password": {
+      "detail": "hide_password()",
+      "doc": "Volta a esconder os caracteres da senha.",
+      "insert": "hide_password()"
+    },
+    "open": {
+      "detail": "open()",
+      "doc": "Abre o endereço do link no navegador (só http, https e mailto).",
+      "insert": "open()"
     }
   },
   "components": [
@@ -246,6 +296,7 @@
         }
       ],
       "methods": [
+        "clear",
         "show",
         "hide",
         "set_visible",
@@ -305,6 +356,7 @@
         }
       ],
       "methods": [
+        "clear",
         "show",
         "hide",
         "set_visible",
@@ -886,6 +938,673 @@
         "resumo": "Uma tabela com linhas e colunas.",
         "paraQue": "Mostrar listas de dados com mais de uma informação por linha.",
         "exemplo": "form.tblClientes.add_row([\"Ana\", \"ana@email.com\"])"
+      }
+    },
+    {
+      "type": "NumericField",
+      "label": "NumericField",
+      "category": "Entradas",
+      "width": 120,
+      "height": 28,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "key": "minValue",
+          "label": "Mínimo",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "key": "maxValue",
+          "label": "Máximo",
+          "type": "number",
+          "default": 100
+        },
+        {
+          "key": "step",
+          "label": "Passo",
+          "type": "number",
+          "default": 1,
+          "min": 1e-06
+        },
+        {
+          "key": "decimals",
+          "label": "Casas decimais",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 6
+        },
+        {
+          "key": "readOnly",
+          "label": "Somente leitura",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "increment",
+        "decrement",
+        "set_range",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Um campo que só aceita números, com setinhas para aumentar e diminuir.",
+        "paraQue": "Idade, quantidade, preço: qualquer valor numérico com mínimo e máximo.",
+        "exemplo": "form.numIdade.value = 18\nform.numIdade.increment()"
+      }
+    },
+    {
+      "type": "PasswordField",
+      "label": "PasswordField",
+      "category": "Entradas",
+      "width": 160,
+      "height": 28,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "placeholder",
+          "label": "Dica (placeholder)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "showToggle",
+          "label": "Botão de mostrar a senha",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "readOnly",
+          "label": "Somente leitura",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "runtimeProps": {
+        "revealed": false
+      },
+      "aliases": {
+        "text": "value"
+      },
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "clear",
+        "show_password",
+        "hide_password",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Um campo de texto que esconde o que é digitado, para senhas.",
+        "paraQue": "Telas de login e qualquer dado que não deve aparecer na tela.",
+        "exemplo": "if form.pwdSenha.value == \"1234\":\n    app.show_message(\"Bem-vindo!\")"
+      }
+    },
+    {
+      "type": "DatePicker",
+      "label": "DatePicker",
+      "category": "Entradas",
+      "width": 150,
+      "height": 28,
+      "props": [
+        {
+          "key": "value",
+          "label": "Data (AAAA-MM-DD)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "minDate",
+          "label": "Data mínima",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "maxDate",
+          "label": "Data máxima",
+          "type": "string",
+          "default": ""
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "set_today",
+        "clear",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Um campo para escolher uma data num calendário.",
+        "paraQue": "Data de nascimento, prazo, agendamento. O valor é um texto no formato AAAA-MM-DD.",
+        "exemplo": "form.dtNasc.set_today()\nprint(form.dtNasc.value)   # 2026-01-31"
+      }
+    },
+    {
+      "type": "Slider",
+      "label": "Slider",
+      "category": "Entradas",
+      "width": 180,
+      "height": 28,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "number",
+          "default": 50
+        },
+        {
+          "key": "minValue",
+          "label": "Mínimo",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "key": "maxValue",
+          "label": "Máximo",
+          "type": "number",
+          "default": 100
+        },
+        {
+          "key": "step",
+          "label": "Passo",
+          "type": "number",
+          "default": 1,
+          "min": 1e-06
+        },
+        {
+          "key": "showValue",
+          "label": "Mostrar o valor",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "increment",
+        "decrement",
+        "set_range",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Uma barra com um botão que desliza para escolher um valor.",
+        "paraQue": "Volume, brilho, nota: valores escolhidos \"no olho\" dentro de uma faixa.",
+        "exemplo": "@form.sldVolume.on_change\ndef mudou(ev):\n    form.lblVolume.text = str(ev.value)"
+      }
+    },
+    {
+      "type": "ToggleSwitch",
+      "label": "ToggleSwitch",
+      "category": "Entradas",
+      "width": 140,
+      "height": 24,
+      "props": [
+        {
+          "key": "text",
+          "label": "Texto",
+          "type": "string",
+          "default": "Ligado"
+        },
+        {
+          "key": "checked",
+          "label": "Ligado",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "change",
+          "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        }
+      ],
+      "methods": [
+        "toggle",
+        "turn_on",
+        "turn_off",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Um interruptor de liga/desliga.",
+        "paraQue": "Opções que valem na hora, como \"Modo escuro\" ou \"Notificações\".",
+        "exemplo": "if form.swNotificar.checked:\n    print(\"ligado\")\nform.swNotificar.toggle()"
+      }
+    },
+    {
+      "type": "ProgressBar",
+      "label": "ProgressBar",
+      "category": "Exibição",
+      "width": 200,
+      "height": 20,
+      "props": [
+        {
+          "key": "value",
+          "label": "Valor",
+          "type": "number",
+          "default": 40
+        },
+        {
+          "key": "minValue",
+          "label": "Mínimo",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "key": "maxValue",
+          "label": "Máximo",
+          "type": "number",
+          "default": 100
+        },
+        {
+          "key": "indeterminate",
+          "label": "Indeterminada (animada)",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "showLabel",
+          "label": "Mostrar a porcentagem",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [
+        "increment",
+        "set_range",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
+      "help": {
+        "resumo": "Uma barra que mostra quanto de uma tarefa já foi feito.",
+        "paraQue": "Acompanhar downloads, etapas de um cadastro ou qualquer coisa demorada.",
+        "exemplo": "form.pbProgresso.value = 0\nform.pbProgresso.increment(10)"
+      }
+    },
+    {
+      "type": "Alert",
+      "label": "Alert",
+      "category": "Exibição",
+      "width": 260,
+      "height": 44,
+      "props": [
+        {
+          "key": "title",
+          "label": "Título",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "text",
+          "label": "Mensagem",
+          "type": "string",
+          "default": "Mensagem de aviso"
+        },
+        {
+          "key": "variant",
+          "label": "Tipo",
+          "type": "enum",
+          "default": "info",
+          "options": [
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
+      "help": {
+        "resumo": "Uma faixa colorida com um aviso para o usuário.",
+        "paraQue": "Mostrar sucesso, atenção ou erro dentro da própria tela, sem abrir uma caixa de mensagem.",
+        "exemplo": "form.altAviso.variant = \"error\"\nform.altAviso.text = \"Preencha o nome.\"\nform.altAviso.show()"
+      }
+    },
+    {
+      "type": "Link",
+      "label": "Link",
+      "category": "Exibição",
+      "width": 120,
+      "height": 22,
+      "props": [
+        {
+          "key": "text",
+          "label": "Texto",
+          "type": "string",
+          "default": "Link"
+        },
+        {
+          "key": "url",
+          "label": "Endereço (URL)",
+          "type": "string",
+          "default": ""
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [
+        "open",
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset",
+        "focus",
+        "blur"
+      ],
+      "help": {
+        "resumo": "Um texto clicável, como os links de uma página.",
+        "paraQue": "Abrir um site ou e-mail no navegador, ou servir de \"botão discreto\" para uma ação.",
+        "exemplo": "form.lnkSite.url = \"https://www.python.org\"\nform.lnkSite.open()"
+      }
+    },
+    {
+      "type": "Card",
+      "label": "Card",
+      "category": "Containers",
+      "width": 260,
+      "height": 180,
+      "container": true,
+      "insetTop": 44,
+      "props": [
+        {
+          "key": "title",
+          "label": "Título",
+          "type": "string",
+          "default": "Título"
+        },
+        {
+          "key": "subtitle",
+          "label": "Subtítulo",
+          "type": "string",
+          "default": ""
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
+      "help": {
+        "resumo": "Uma caixa com título (e subtítulo) que guarda outros componentes.",
+        "paraQue": "Separar a tela em blocos bem identificados, como \"Dados pessoais\" e \"Endereço\".",
+        "exemplo": "form.crdCliente.title = \"Cliente: Ana\""
+      }
+    },
+    {
+      "type": "GroupBox",
+      "label": "GroupBox",
+      "category": "Containers",
+      "width": 240,
+      "height": 140,
+      "container": true,
+      "insetTop": 18,
+      "props": [
+        {
+          "key": "title",
+          "label": "Título",
+          "type": "string",
+          "default": "Grupo"
+        }
+      ],
+      "common": [
+        "enabled",
+        "visible",
+        "fontSize",
+        "bold",
+        "italic",
+        "color",
+        "background",
+        "tooltip"
+      ],
+      "events": [
+        {
+          "name": "click",
+          "doc": "Quando o usuário clica."
+        }
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "set_visible",
+        "enable",
+        "disable",
+        "set_enabled",
+        "set_tooltip",
+        "set_position",
+        "set_size",
+        "reset"
+      ],
+      "help": {
+        "resumo": "Uma moldura com um título no topo, para agrupar componentes.",
+        "paraQue": "Juntar opções relacionadas, como um grupo de caixas de marcar.",
+        "exemplo": "form.grpOpcoes.title = \"Opções de entrega\""
       }
     }
   ]

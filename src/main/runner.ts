@@ -1,5 +1,5 @@
-import { showUnlessHidden, WEB_THROTTLING } from './testMode'
-import { app, BrowserWindow, dialog, ipcMain, screen, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle } from 'electron'
+import { HIDE_WINDOWS, showUnlessHidden, WEB_THROTTLING } from './testMode'
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle } from 'electron'
 import { existsSync, promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { FormDocument } from '@shared/project'
@@ -209,6 +209,9 @@ function onPythonMessage(run: Run, msg: PyMessage): void {
     case 'close':
       if (!run.win.isDestroyed()) run.win.close()
       break
+    case 'open_url':
+      openLink(run, msg.url)
+      break
     case 'navigate':
       if (typeof msg.form === 'string' && !run.win.isDestroyed()) navigate(run, msg.form)
       break
@@ -249,6 +252,24 @@ function swapScreen(run: Run, init: RunInit, scriptPath: string, script: string,
     run.win.setContentSize(Math.min(Math.max(Math.round(doc.width), 200), 2400), Math.min(Math.max(Math.round(doc.height), 120), 1600))
   run.win.setTitle(doc.title || fallbackTitle)
   run.win.webContents.send('run:reload')
+}
+
+const LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
+
+/** Abre um endereço pedido por um Link (clique ou `open()`), só se for http, https ou mailto. */
+function openLink(run: Run, raw: unknown): void {
+  let url: URL | null = null
+  try {
+    if (typeof raw === 'string' && raw.length <= 2048) url = new URL(raw.trim())
+  } catch {
+    url = null
+  }
+  if (!url || !LINK_PROTOCOLS.has(url.protocol)) {
+    ideConsole(run, { level: 'error', text: `Link bloqueado: "${clampText(String(raw), 200)}" não é um endereço http, https ou mailto.` })
+    return
+  }
+  ideConsole(run, { level: 'info', text: `Link aberto: ${url.toString()}` })
+  if (!HIDE_WINDOWS) void shell.openExternal(url.toString()) // nos testes automáticos não abre o navegador de ninguém
 }
 
 function navigate(run: Run, name: string): void {
@@ -404,6 +425,10 @@ export function registerRunIpc(): void {
       script: run.script,
       script_name: basename(run.scriptPath)
     })
+  })
+  ipcMain.on('run:open-url', (e: IpcMainEvent, url: unknown) => {
+    const run = byRunWindow.get(e.sender.id)
+    if (run) openLink(run, url)
   })
   ipcMain.on('run:send', (e: IpcMainEvent, msg: unknown) => {
     const run = byRunWindow.get(e.sender.id)
