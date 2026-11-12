@@ -6,7 +6,8 @@ export function num(v: unknown, fallback = 0): number {
 
 /** Faixa válida: se o máximo vier menor que o mínimo, vale o mínimo. */
 export function rangeOf(p: Record<string, unknown>): { min: number; max: number } {
-  const min = num(p.minValue, 0)
+  // Sem negativos (NumericField com "Aceitar negativos" desligado), o mínimo nunca fica abaixo de zero.
+  const min = p.allowNegative === false ? Math.max(0, num(p.minValue, 0)) : num(p.minValue, 0)
   return { min, max: Math.max(min, num(p.maxValue, 100)) }
 }
 
@@ -37,4 +38,13 @@ export function safeUrl(raw: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/** Símbolo de cada tipo de aviso (Alert). */
+export const ALERT_ICON: Record<string, string> = { info: 'ℹ', success: '✔', warning: '⚠', error: '✖' }
+
+/** Texto do interruptor conforme o estado: `onText`/`offText` quando preenchidos, senão `text`. */
+export function toggleText(p: Record<string, unknown>): string {
+  const pick = p.checked === true ? p.onText : p.offText
+  return typeof pick === 'string' && pick !== '' ? pick : typeof p.text === 'string' ? p.text : ''
 }

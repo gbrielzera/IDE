@@ -144,10 +144,18 @@ class Component:
 
     def _set(self, key: str, value: Any) -> None:
         """Altera o espelho e agenda o envio à IDE (sem enviar nada se o valor não mudou)."""
-        if self._props.get(key) == value:
+        previous = self._props.get(key)
+        if previous == value:
             return
         self._props[key] = value
         self._runtime.queue_change(self._id, key, value)
+        # A barra de progresso avisa quando chega ao fim, mesmo quando é o script que muda o valor.
+        if key == "value" and "complete" in EVENTS.get(self._type, ()):
+            _, high = self._range()
+            is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
+            was_below = not isinstance(previous, (int, float)) or isinstance(previous, bool) or previous < high
+            if is_number and value >= high and was_below:
+                self._runtime.emit(self, "complete", {"value": value})
 
     def _sync(self, key: str, value: Any) -> None:
         """Valor vindo da IDE (o usuário digitou/clicou): atualiza só o espelho."""
@@ -243,6 +251,8 @@ class Component:
         high = self._props.get("maxValue", 100)
         low = low if isinstance(low, (int, float)) and not isinstance(low, bool) else 0
         high = high if isinstance(high, (int, float)) and not isinstance(high, bool) else 100
+        if self._props.get("allowNegative") is False:
+            low = max(0, low)  # "Aceitar negativos" desligado: o mínimo nunca fica abaixo de zero
         return low, max(low, high)
 
     def _set_number(self, value: float) -> None:
@@ -284,8 +294,28 @@ class Component:
 
     # ----- liga/desliga (ToggleSwitch) -----
     def toggle(self) -> None:
+        """Interruptor: liga/desliga. Card e GroupBox: recolhe/expande."""
         self._require("toggle")
-        self._set("checked", not bool(self._props.get("checked")))
+        key = "checked" if "checked" in self._props else "collapsed"
+        self._set(key, not bool(self._props.get(key)))
+
+    # ----- recolher/expandir (Card, GroupBox) -----
+    def collapse(self) -> None:
+        self._require("collapse")
+        self._set("collapsed", True)
+
+    def expand(self) -> None:
+        self._require("expand")
+        self._set("collapsed", False)
+
+    # ----- barra de progresso -----
+    def start_indeterminate(self) -> None:
+        self._require("start_indeterminate")
+        self._set("indeterminate", True)
+
+    def stop_indeterminate(self) -> None:
+        self._require("stop_indeterminate")
+        self._set("indeterminate", False)
 
     def turn_on(self) -> None:
         self._require("turn_on")

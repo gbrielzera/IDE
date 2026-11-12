@@ -156,7 +156,7 @@
     },
     "toggle": {
       "detail": "toggle()",
-      "doc": "Inverte: ligado vira desligado e vice-versa.",
+      "doc": "Inverte o estado: ligado/desligado (interruptor) ou recolhido/expandido (Card e GroupBox).",
       "insert": "toggle()"
     },
     "turn_on": {
@@ -188,6 +188,26 @@
       "detail": "open()",
       "doc": "Abre o endereço do link no navegador (só http, https e mailto).",
       "insert": "open()"
+    },
+    "collapse": {
+      "detail": "collapse()",
+      "doc": "Recolhe: fica só o cabeçalho e o conteúdo some.",
+      "insert": "collapse()"
+    },
+    "expand": {
+      "detail": "expand()",
+      "doc": "Expande de volta, mostrando o conteúdo.",
+      "insert": "expand()"
+    },
+    "start_indeterminate": {
+      "detail": "start_indeterminate()",
+      "doc": "Liga a animação de \"trabalhando\", para quando não dá para saber quanto falta.",
+      "insert": "start_indeterminate()"
+    },
+    "stop_indeterminate": {
+      "detail": "stop_indeterminate()",
+      "doc": "Desliga a animação e volta a mostrar o valor.",
+      "insert": "stop_indeterminate()"
     }
   },
   "components": [
@@ -985,6 +1005,36 @@
           "label": "Somente leitura",
           "type": "boolean",
           "default": false
+        },
+        {
+          "key": "placeholder",
+          "label": "Dica (placeholder)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "prefix",
+          "label": "Texto antes (ex.: R$)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "suffix",
+          "label": "Texto depois (ex.: kg)",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "showSpinner",
+          "label": "Mostrar as setinhas",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "allowNegative",
+          "label": "Aceitar negativos",
+          "type": "boolean",
+          "default": true
         }
       ],
       "common": [
@@ -1056,6 +1106,14 @@
           "label": "Somente leitura",
           "type": "boolean",
           "default": false
+        },
+        {
+          "key": "maxLength",
+          "label": "Máximo de caracteres (0 = sem limite)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 10000
         }
       ],
       "common": [
@@ -1127,6 +1185,18 @@
           "label": "Data máxima",
           "type": "string",
           "default": ""
+        },
+        {
+          "key": "allowClear",
+          "label": "Botão de limpar",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "showTodayButton",
+          "label": "Botão \"Hoje\"",
+          "type": "boolean",
+          "default": false
         }
       ],
       "common": [
@@ -1204,6 +1274,16 @@
           "label": "Mostrar o valor",
           "type": "boolean",
           "default": false
+        },
+        {
+          "key": "orientation",
+          "label": "Orientação",
+          "type": "enum",
+          "default": "horizontal",
+          "options": [
+            "horizontal",
+            "vertical"
+          ]
         }
       ],
       "common": [
@@ -1220,6 +1300,10 @@
         {
           "name": "change",
           "doc": "Quando o valor/seleção muda. O handler pode receber `ev` (ev.value, ev.index, ev.checked...)."
+        },
+        {
+          "name": "release",
+          "doc": "Quando o usuário solta o botão deslizante (ev.value é o valor final)."
         }
       ],
       "methods": [
@@ -1263,6 +1347,34 @@
           "label": "Ligado",
           "type": "boolean",
           "default": false
+        },
+        {
+          "key": "onText",
+          "label": "Texto quando ligado",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "offText",
+          "label": "Texto quando desligado",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "key": "labelPosition",
+          "label": "Posição do texto",
+          "type": "enum",
+          "default": "right",
+          "options": [
+            "right",
+            "left"
+          ]
+        },
+        {
+          "key": "description",
+          "label": "Descrição (linha menor)",
+          "type": "string",
+          "default": ""
         }
       ],
       "common": [
@@ -1340,6 +1452,16 @@
           "label": "Mostrar a porcentagem",
           "type": "boolean",
           "default": false
+        },
+        {
+          "key": "orientation",
+          "label": "Orientação",
+          "type": "enum",
+          "default": "horizontal",
+          "options": [
+            "horizontal",
+            "vertical"
+          ]
         }
       ],
       "common": [
@@ -1356,9 +1478,15 @@
         {
           "name": "click",
           "doc": "Quando o usuário clica."
+        },
+        {
+          "name": "complete",
+          "doc": "Quando o valor chega ao máximo (inclusive quando é o script que muda o valor)."
         }
       ],
       "methods": [
+        "start_indeterminate",
+        "stop_indeterminate",
         "increment",
         "set_range",
         "show",
@@ -1408,6 +1536,18 @@
             "warning",
             "error"
           ]
+        },
+        {
+          "key": "showIcon",
+          "label": "Mostrar o ícone",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "dismissible",
+          "label": "Pode ser fechado (×)",
+          "type": "boolean",
+          "default": false
         }
       ],
       "common": [
@@ -1424,6 +1564,10 @@
         {
           "name": "click",
           "doc": "Quando o usuário clica."
+        },
+        {
+          "name": "dismiss",
+          "doc": "Quando o usuário fecha o aviso pelo ×."
         }
       ],
       "methods": [
@@ -1462,6 +1606,12 @@
           "label": "Endereço (URL)",
           "type": "string",
           "default": ""
+        },
+        {
+          "key": "underline",
+          "label": "Sublinhado",
+          "type": "boolean",
+          "default": true
         }
       ],
       "common": [
@@ -1521,6 +1671,30 @@
           "label": "Subtítulo",
           "type": "string",
           "default": ""
+        },
+        {
+          "key": "border",
+          "label": "Borda",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "shadow",
+          "label": "Sombra",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "collapsible",
+          "label": "Pode recolher",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "collapsed",
+          "label": "Recolhido",
+          "type": "boolean",
+          "default": false
         }
       ],
       "common": [
@@ -1537,9 +1711,20 @@
         {
           "name": "click",
           "doc": "Quando o usuário clica."
+        },
+        {
+          "name": "collapse",
+          "doc": "Quando o usuário recolhe pelo cabeçalho."
+        },
+        {
+          "name": "expand",
+          "doc": "Quando o usuário expande pelo cabeçalho."
         }
       ],
       "methods": [
+        "collapse",
+        "expand",
+        "toggle",
         "show",
         "hide",
         "set_visible",
@@ -1571,6 +1756,24 @@
           "label": "Título",
           "type": "string",
           "default": "Grupo"
+        },
+        {
+          "key": "border",
+          "label": "Borda",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "collapsible",
+          "label": "Pode recolher",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "collapsed",
+          "label": "Recolhido",
+          "type": "boolean",
+          "default": false
         }
       ],
       "common": [
@@ -1587,9 +1790,20 @@
         {
           "name": "click",
           "doc": "Quando o usuário clica."
+        },
+        {
+          "name": "collapse",
+          "doc": "Quando o usuário recolhe pelo cabeçalho."
+        },
+        {
+          "name": "expand",
+          "doc": "Quando o usuário expande pelo cabeçalho."
         }
       ],
       "methods": [
+        "collapse",
+        "expand",
+        "toggle",
         "show",
         "hide",
         "set_visible",

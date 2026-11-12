@@ -211,6 +211,7 @@ export const NOVIDADES: Novidade[] = [
   {
     titulo: 'Versão atual',
     itens: [
+      'Componentes novos mais completos: prefixo/sufixo e sem negativos no NumericField, limite de caracteres na senha, botões Hoje e limpar na data, orientação vertical, textos do interruptor, aviso que pode ser fechado, Card e GroupBox que recolhem, e os eventos release, dismiss, collapse, expand e complete.',
       'Dez componentes novos: NumericField, PasswordField, DatePicker, Slider, ToggleSwitch, ProgressBar, Alert, Link, Card e GroupBox. A lista de componentes agora é agrupada por categoria.',
       'API comum de componentes: show/hide, enable/disable, focus/blur, set_tooltip, set_position, set_size e reset, declaradas no registro por tipo.',
       'Identidade estável: cada componente tem um uid interno; renomear o ID mantém seleção, histórico e a tela. Projetos antigos são atualizados (com cópia .bak).',

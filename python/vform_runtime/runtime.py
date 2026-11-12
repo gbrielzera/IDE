@@ -73,6 +73,7 @@ class Runtime:
         self.form: Form | None = None
         self.script_name = "script.py"
         self._changes: list[tuple[str, str, Any]] = []
+        self._emitting = 0
 
     # ----- saída para a IDE -----
     def console(self, level: str, text: str, line: int | None = None) -> None:
@@ -170,6 +171,18 @@ class Runtime:
         for handler in list(comp._handlers.get(name, [])):
             self._call(handler, event)
         self.flush()
+
+    def emit(self, comp: Component, name: str, args: dict[str, Any]) -> None:
+        """Dispara um evento gerado pelo próprio runtime (ex.: `complete` da barra de progresso)."""
+        if self._emitting >= 20:  # um handler que provoca o próprio evento não entra em laço infinito
+            return
+        self._emitting += 1
+        try:
+            event = Event(comp, name, args)
+            for handler in list(comp._handlers.get(name, [])):
+                self._call(handler, event)
+        finally:
+            self._emitting -= 1
 
     def _component(self, comp_id: Any) -> Component | None:
         if self.form is None or not isinstance(comp_id, str):

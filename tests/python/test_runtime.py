@@ -27,13 +27,14 @@ def comps() -> dict:
         "chk": {"type": "CheckBox", "props": {**COMMON, "text": "ok", "checked": False}},
         "tbl": {"type": "Table", "props": {**COMMON, "columns": ["a", "b"], "rows": [], "selectedIndex": -1}},
         "lst": {"type": "ListBox", "props": {**COMMON, "items": ["a", "b", "c"], "selectedIndex": -1}},
-        "num": {"type": "NumericField", "props": {**COMMON, "value": 5, "minValue": 0, "maxValue": 10, "step": 2, "decimals": 0, "readOnly": False}},
+        "num": {"type": "NumericField", "props": {**COMMON, "value": 5, "minValue": 0, "maxValue": 10, "step": 2, "decimals": 0, "readOnly": False, "allowNegative": True}},
         "sld": {"type": "Slider", "props": {**COMMON, "value": 50, "minValue": 0, "maxValue": 100, "step": 0.1, "showValue": False}},
         "pb": {"type": "ProgressBar", "props": {**COMMON, "value": 40, "minValue": 0, "maxValue": 100, "indeterminate": False, "showLabel": False}},
         "sw": {"type": "ToggleSwitch", "props": {**COMMON, "text": "x", "checked": False}},
         "dt": {"type": "DatePicker", "props": {**COMMON, "value": "2020-01-01", "minDate": "", "maxDate": ""}},
         "pwd": {"type": "PasswordField", "props": {**COMMON, "value": "abc", "placeholder": "", "showToggle": False, "readOnly": False, "revealed": False}},
         "lnk": {"type": "Link", "props": {**COMMON, "text": "site", "url": "https://exemplo.org/"}},
+        "crd": {"type": "Card", "props": {**COMMON, "title": "t", "subtitle": "", "collapsible": True, "collapsed": False}},
     }
 
 
@@ -292,7 +293,7 @@ class ErrorsTest(unittest.TestCase):
         h.load("""
             nome = "txtNome"
             form[nome].value = "via colchetes"
-            assert "btnOk" in form and "x" not in form and len(form) == 14
+            assert "btnOk" in form and "x" not in form and len(form) == 15
         """)
         self.assertEqual(h.errors(), [])
         self.assertEqual(h.of("patch")[0]["changes"][0]["value"], "via colchetes")
@@ -694,3 +695,62 @@ class V03ComponentsTest(unittest.TestCase):
         h = Harness()
         h.load("form.lst.clear()")
         self.assertEqual(self.last(h)[("lst", "items")], [])
+
+
+class V03PropsTest(unittest.TestCase):
+    def last(self, h: Harness) -> dict:
+        return {(c["id"], c["prop"]): c["value"] for m in h.of("patch") for c in m["changes"]}
+
+    def test_card_recolhe_expande_e_alterna(self) -> None:
+        h = Harness()
+        h.load("""
+            form.crd.collapse()
+            assert form.crd.collapsed is True
+            form.crd.toggle()
+            assert form.crd.collapsed is False
+            form.crd.toggle()
+        """)
+        self.assertEqual(h.errors(), [])
+        self.assertEqual(self.last(h)[("crd", "collapsed")], True)
+
+    def test_toggle_do_interruptor_continua_mexendo_em_checked(self) -> None:
+        h = Harness()
+        h.load("form.sw.toggle()")
+        self.assertEqual(self.last(h), {("sw", "checked"): True})
+
+    def test_progresso_indeterminado(self) -> None:
+        h = Harness()
+        h.load("""
+            form.pb.start_indeterminate()
+            form.pb.stop_indeterminate()
+            form.pb.start_indeterminate()
+        """)
+        self.assertEqual(self.last(h)[("pb", "indeterminate")], True)
+
+    def test_complete_dispara_uma_vez_ao_chegar_no_maximo(self) -> None:
+        h = Harness()
+        h.load("""
+            vezes = []
+
+            @form.pb.on_complete
+            def fim(ev):
+                vezes.append(ev.value)
+                form.lblInfo.text = "pronto " + str(len(vezes))
+
+            form.pb.increment(30)   # 70: ainda não
+            form.pb.increment(30)   # 100: completou
+            form.pb.increment(30)   # continua em 100: não repete
+            form.pb.value = 10
+            form.pb.value = 100     # completou de novo
+        """)
+        self.assertEqual(h.errors(), [])
+        self.assertEqual(self.last(h)[("lblInfo", "text")], "pronto 2")
+
+    def test_sem_negativos_o_minimo_fica_em_zero(self) -> None:
+        h = Harness()
+        h.load("""
+            form.num.set_range(-10, 10)
+            form.num.allow_negative = False
+            form.num.decrement(100)
+        """)
+        self.assertEqual(self.last(h)[("num", "value")], 0)

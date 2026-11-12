@@ -4,7 +4,8 @@ import type { RunChange, RunComponent, RunInit } from '@shared/run'
 import { childBoxStyle, childrenLayerStyle } from '../components/layoutStyle'
 import { appearanceStyle } from '../components/render'
 import { activeTab, layoutOf } from '../core/props'
-import { clamp, formatNumber, num, percentOf, rangeOf, safeUrl } from '../components/numeric'
+import { ALERT_ICON, clamp, formatNumber, num, percentOf, rangeOf, safeUrl, toggleText } from '../components/numeric'
+import { insetTop } from '../core/tree'
 
 /** Propriedades atuais de cada componente: o "espelho" que a janela mostra. */
 type RunState = Record<string, Record<string, unknown>>
@@ -210,9 +211,25 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
         const value = Number(clamp(raw, min, max).toFixed(d))
         if (value !== p.value) change(id, 'value', value, { name: 'change', args: { value } })
       }
-      return <NumberInput text={formatNumber(p.value, p.decimals)} min={min} max={max} step={step} disabled={disabled} readOnly={p.readOnly === true} onCommit={set} />
+      return (
+        <div className={`r-affixed${p.showSpinner === false ? ' no-spinner' : ''}`}>
+          {str(p.prefix) && <span className="r-affix">{str(p.prefix)}</span>}
+          <NumberInput
+            text={formatNumber(p.value, p.decimals)}
+            min={min}
+            max={max}
+            step={step}
+            placeholder={str(p.placeholder)}
+            disabled={disabled}
+            readOnly={p.readOnly === true}
+            onCommit={set}
+          />
+          {str(p.suffix) && <span className="r-affix">{str(p.suffix)}</span>}
+        </div>
+      )
     }
-    case 'PasswordField':
+    case 'PasswordField': {
+      const limit = Math.round(num(p.maxLength, 0))
       return (
         <div className="r-password">
           <input
@@ -220,6 +237,7 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
             type={p.revealed === true ? 'text' : 'password'}
             value={str(p.value)}
             placeholder={str(p.placeholder)}
+            maxLength={limit > 0 ? limit : undefined}
             readOnly={p.readOnly === true}
             disabled={disabled}
             autoComplete="off"
@@ -232,22 +250,40 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
           )}
         </div>
       )
-    case 'DatePicker':
+    }
+    case 'DatePicker': {
+      const setDate = (value: string): void => {
+        if (value !== str(p.value)) change(id, 'value', value, { name: 'change', args: { value } })
+      }
       return (
-        <input
-          className="r-input"
-          type="date"
-          value={str(p.value)}
-          min={str(p.minDate) || undefined}
-          max={str(p.maxDate) || undefined}
-          disabled={disabled}
-          onChange={(e) => change(id, 'value', e.target.value, { name: 'change', args: { value: e.target.value } })}
-        />
+        <div className="r-password">
+          <input
+            className="r-input"
+            type="date"
+            value={str(p.value)}
+            min={str(p.minDate) || undefined}
+            max={str(p.maxDate) || undefined}
+            disabled={disabled}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          {p.showTodayButton === true && (
+            <button className="r-button r-mini" disabled={disabled} onClick={() => setDate(new Date().toLocaleDateString('sv-SE'))}>
+              Hoje
+            </button>
+          )}
+          {p.allowClear === true && (
+            <button className="r-button r-eye" disabled={disabled || str(p.value) === ''} title="Limpar a data" onClick={() => setDate('')}>
+              ×
+            </button>
+          )}
+        </div>
       )
+    }
     case 'Slider': {
       const { min, max } = rangeOf(p)
+      const release = (): void => fire(id, 'release', { value: num(p.value) })
       return (
-        <div className="r-slider">
+        <div className={`r-slider${p.orientation === 'vertical' ? ' vertical' : ''}`}>
           <input
             type="range"
             min={min}
@@ -259,6 +295,8 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
               const value = Number(e.target.value)
               change(id, 'value', value, { name: 'change', args: { value } })
             }}
+            onPointerUp={release}
+            onKeyUp={(e) => /^(Arrow|Page|Home|End)/.test(e.key) && release()}
           />
           {p.showValue === true && <span className="r-slider-value">{String(p.value ?? '')}</span>}
         </div>
@@ -266,7 +304,7 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
     }
     case 'ToggleSwitch':
       return (
-        <label className="r-check r-toggle">
+        <label className={`r-check r-toggle${p.labelPosition === 'left' ? ' label-left' : ''}`}>
           <input
             type="checkbox"
             role="switch"
@@ -275,34 +313,56 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
             onChange={(e) => change(id, 'checked', e.target.checked, { name: 'change', args: { checked: e.target.checked } })}
           />
           <span className={`r-switch${p.checked === true ? ' on' : ''}`} />
-          {str(p.text)}
+          <span className="r-toggle-text">
+            {toggleText(p)}
+            {str(p.description) && <small>{str(p.description)}</small>}
+          </span>
         </label>
       )
-    case 'ProgressBar':
+    case 'ProgressBar': {
+      const vertical = p.orientation === 'vertical'
+      const size = `${percentOf(p)}%`
       return (
         <div
-          className={`r-progress${p.indeterminate === true ? ' indeterminate' : ''}`}
+          className={`r-progress${p.indeterminate === true ? ' indeterminate' : ''}${vertical ? ' vertical' : ''}`}
           role="progressbar"
+          aria-orientation={vertical ? 'vertical' : 'horizontal'}
           aria-valuemin={rangeOf(p).min}
           aria-valuemax={rangeOf(p).max}
           aria-valuenow={p.indeterminate === true ? undefined : clamp(num(p.value), rangeOf(p).min, rangeOf(p).max)}
           onClick={click}
         >
-          <div className="r-progress-fill" style={p.indeterminate === true ? undefined : { width: `${percentOf(p)}%` }} />
+          <div className="r-progress-fill" style={p.indeterminate === true ? undefined : vertical ? { height: size } : { width: size }} />
           {p.showLabel === true && p.indeterminate !== true && <span className="r-progress-label">{percentOf(p)}%</span>}
         </div>
       )
+    }
     case 'Alert':
       return (
         <div className={`r-alert v-${str(p.variant) || 'info'}`} role="alert" onClick={click}>
-          {str(p.title) && <b>{str(p.title)}</b>}
-          <span>{str(p.text)}</span>
+          {p.showIcon !== false && <span className="r-alert-icon">{ALERT_ICON[str(p.variant)] ?? ALERT_ICON.info}</span>}
+          <span className="r-alert-body">
+            {str(p.title) && <b>{str(p.title)}</b>}
+            <span>{str(p.text)}</span>
+          </span>
+          {p.dismissible === true && (
+            <button
+              className="r-alert-close"
+              aria-label="Fechar o aviso"
+              onClick={(e) => {
+                e.stopPropagation()
+                change(id, 'visible', false, { name: 'dismiss', args: {} })
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       )
     case 'Link':
       return (
         <a
-          className={`r-link${disabled ? ' is-disabled' : ''}`}
+          className={`r-link${disabled ? ' is-disabled' : ''}${p.underline === false ? ' no-underline' : ''}`}
           href={safeUrl(p.url) ?? '#'}
           tabIndex={disabled ? -1 : 0}
           onClick={(e) => {
@@ -317,20 +377,43 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
         </a>
       )
     case 'Card':
+    case 'GroupBox': {
+      const collapsed = p.collapsed === true
+      const chevron = p.collapsible === true && (
+        <button
+          className="r-chevron"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expandir' : 'Recolher'}
+          disabled={disabled}
+          onClick={(e) => {
+            e.stopPropagation()
+            change(id, 'collapsed', !collapsed, { name: collapsed ? 'expand' : 'collapse', args: {} })
+          }}
+        >
+          {collapsed ? '▸' : '▾'}
+        </button>
+      )
+      if (node.type === 'GroupBox')
+        return (
+          <div className={`r-group${p.border === false ? ' no-border' : ''}${collapsed ? ' collapsed' : ''}`} onClick={click}>
+            <span className="r-group-title">
+              {chevron}
+              {str(p.title)}
+            </span>
+          </div>
+        )
       return (
-        <div className="r-card" onClick={click}>
+        <div className={`r-card${p.border === false ? ' no-border' : ''}${p.shadow === false ? ' no-shadow' : ''}${collapsed ? ' collapsed' : ''}`} onClick={click}>
           <div className="r-card-head">
-            <b>{str(p.title)}</b>
-            {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+            <span className="r-card-titles">
+              <b>{str(p.title)}</b>
+              {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+            </span>
+            {chevron}
           </div>
         </div>
       )
-    case 'GroupBox':
-      return (
-        <div className="r-group" onClick={click}>
-          <span className="r-group-title">{str(p.title)}</span>
-        </div>
-      )
+    }
     default:
       return <div className="r-unknown">? {node.type}</div>
   }
@@ -340,13 +423,16 @@ function Control({ node, p }: { node: FormNode; p: Record<string, unknown> }): R
  * Campo numérico: o texto fica livre enquanto se digita (dá para apagar e escrever "-") e só vira número,
  * já dentro da faixa, ao sair do campo, apertar Enter ou usar as setinhas.
  */
-function NumberInput(props: { text: string; min: number; max: number; step: number; disabled: boolean; readOnly: boolean; onCommit(value: number): void }): React.JSX.Element {
+function NumberInput(props: { text: string; min: number; max: number; step: number; placeholder?: string; disabled: boolean; readOnly: boolean; onCommit(value: number): void }): React.JSX.Element {
   const [text, setText] = useState(props.text)
   useEffect(() => setText(props.text), [props.text]) // o valor mudou por fora (script, setinhas): mostra o novo
   const commit = (raw: string): void => {
     const value = Number(raw.replace(',', '.'))
     if (raw.trim() === '' || !Number.isFinite(value)) setText(props.text)
-    else props.onCommit(value)
+    else {
+      props.onCommit(value)
+      setText(props.text) // se o valor ajustado for o mesmo de antes (ex.: abaixo do mínimo), o campo volta a mostrá-lo
+    }
   }
   return (
     <input
@@ -357,6 +443,7 @@ function NumberInput(props: { text: string; min: number; max: number; step: numb
       min={props.min}
       max={props.max}
       step={props.step}
+      placeholder={props.placeholder || undefined}
       disabled={props.disabled}
       readOnly={props.readOnly}
       onChange={(e) => {
@@ -379,11 +466,13 @@ function RunNode({ node, parent }: { node: FormNode; parent: FormNode | null }):
   const self: FormNode = { ...node, props: p }
   const parentState = parent ? state[parent.id] : undefined
   const parentLayout = parent && parentState ? layoutOf({ ...parent, props: parentState }) : null
+  // Card/GroupBox recolhido: sobra só o cabeçalho e o conteúdo some.
+  const collapsed = p.collapsed === true && insetTop(node) > 0
   const box = {
     x: Number(p.x ?? node.x),
     y: Number(p.y ?? node.y),
     width: Number(p.width ?? node.width),
-    height: Number(p.height ?? node.height)
+    height: collapsed ? insetTop(node) : Number(p.height ?? node.height)
   }
   const style = { ...childBoxStyle(box, parentLayout), ...(p.visible === false ? { display: 'none' } : {}) }
   const children =
@@ -396,7 +485,7 @@ function RunNode({ node, parent }: { node: FormNode; parent: FormNode | null }):
       <div className="run-ctl" style={appearanceStyle(self)}>
         <Control node={node} p={p} />
       </div>
-      {node.children && (
+      {node.children && !collapsed && (
         <div className="run-children" style={childrenLayerStyle(self)}>
           {children.map((child) => (
             <RunNode key={child.id} node={child} parent={self} />

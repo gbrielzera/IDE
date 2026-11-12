@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { FormNode } from '@shared/project'
 import { activeTab } from '../core/props'
-import { formatNumber, percentOf } from './numeric'
+import { ALERT_ICON, formatNumber, percentOf, toggleText } from './numeric'
 
 function strings(v: unknown): string[] {
   return Array.isArray(v) ? v.map(String) : []
@@ -114,68 +114,94 @@ export function renderContent(node: FormNode): ReactNode {
     case 'NumericField':
       return (
         <div className="cmp cmp-input cmp-combo">
-          <span>{formatNumber(p.value, p.decimals)}</span>
-          <span className="cmp-caret">▴▾</span>
+          <span>
+            {str(p.prefix) && <span className="cmp-affix">{str(p.prefix)} </span>}
+            {formatNumber(p.value, p.decimals)}
+            {str(p.suffix) && <span className="cmp-affix"> {str(p.suffix)}</span>}
+          </span>
+          {p.showSpinner !== false && <span className="cmp-caret">▴▾</span>}
         </div>
       )
     case 'PasswordField':
       return (
-        <div className="cmp cmp-input">
-          {str(p.value) ? '•'.repeat(Math.min(str(p.value).length, 24)) : <span className="cmp-placeholder">{str(p.placeholder)}</span>}
+        <div className="cmp cmp-input cmp-combo">
+          <span>{str(p.value) ? '•'.repeat(Math.min(str(p.value).length, 24)) : <span className="cmp-placeholder">{str(p.placeholder)}</span>}</span>
+          {p.showToggle === true && <span className="cmp-caret">👁</span>}
         </div>
       )
     case 'DatePicker':
       return (
         <div className="cmp cmp-input cmp-combo">
           <span>{str(p.value) || <span className="cmp-placeholder">dd/mm/aaaa</span>}</span>
-          <span className="cmp-caret">▦</span>
+          <span className="cmp-caret">
+            {p.showTodayButton === true && 'Hoje '}
+            {p.allowClear === true && '× '}▦
+          </span>
         </div>
       )
-    case 'Slider':
+    case 'Slider': {
+      const vertical = p.orientation === 'vertical'
       return (
-        <div className="cmp cmp-slider">
+        <div className={`cmp cmp-slider${vertical ? ' vertical' : ''}`}>
           <div className="cmp-track">
-            <div className="cmp-thumb" style={{ left: `${percentOf(p)}%` }} />
+            <div className="cmp-thumb" style={vertical ? { bottom: `${percentOf(p)}%` } : { left: `${percentOf(p)}%` }} />
           </div>
           {p.showValue === true && <span className="cmp-slider-value">{String(p.value ?? '')}</span>}
         </div>
       )
+    }
     case 'ToggleSwitch':
       return (
-        <div className="cmp cmp-check">
+        <div className={`cmp cmp-check cmp-toggle${p.labelPosition === 'left' ? ' label-left' : ''}`}>
           <span className={`cmp-switch${p.checked ? ' on' : ''}`} />
-          {str(p.text)}
+          <span className="cmp-toggle-text">
+            {toggleText(p)}
+            {str(p.description) && <small>{str(p.description)}</small>}
+          </span>
         </div>
       )
-    case 'ProgressBar':
+    case 'ProgressBar': {
+      const vertical = p.orientation === 'vertical'
+      const size = p.indeterminate === true ? '35%' : `${percentOf(p)}%`
       return (
-        <div className="cmp cmp-progress">
-          <div className="cmp-progress-fill" style={{ width: p.indeterminate === true ? '35%' : `${percentOf(p)}%` }} />
+        <div className={`cmp cmp-progress${vertical ? ' vertical' : ''}`}>
+          <div className="cmp-progress-fill" style={vertical ? { height: size } : { width: size }} />
           {p.showLabel === true && p.indeterminate !== true && <span className="cmp-progress-label">{percentOf(p)}%</span>}
         </div>
       )
+    }
     case 'Alert':
       return (
         <div className={`cmp cmp-alert v-${str(p.variant) || 'info'}`}>
-          {str(p.title) && <b>{str(p.title)}</b>}
-          <span>{str(p.text)}</span>
+          {p.showIcon !== false && <span className="cmp-alert-icon">{ALERT_ICON[str(p.variant)] ?? ALERT_ICON.info}</span>}
+          <span className="cmp-alert-body">
+            {str(p.title) && <b>{str(p.title)}</b>}
+            <span>{str(p.text)}</span>
+          </span>
+          {p.dismissible === true && <span className="cmp-alert-close">×</span>}
         </div>
       )
     case 'Link':
-      return <div className="cmp cmp-link">{str(p.text)}</div>
+      return <div className={`cmp cmp-link${p.underline === false ? ' no-underline' : ''}`}>{str(p.text)}</div>
     case 'Card':
       return (
-        <div className="cmp cmp-card">
+        <div className={`cmp cmp-card${p.border === false ? ' no-border' : ''}${p.shadow === false ? ' no-shadow' : ''}`}>
           <div className="cmp-card-head">
-            <b>{str(p.title)}</b>
-            {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+            <span className="cmp-card-titles">
+              <b>{str(p.title)}</b>
+              {str(p.subtitle) && <small>{str(p.subtitle)}</small>}
+            </span>
+            {p.collapsible === true && <span className="cmp-chevron">{p.collapsed === true ? '▸' : '▾'}</span>}
           </div>
         </div>
       )
     case 'GroupBox':
       return (
-        <div className="cmp cmp-group">
-          <span className="cmp-group-title">{str(p.title)}</span>
+        <div className={`cmp cmp-group${p.border === false ? ' no-border' : ''}`}>
+          <span className="cmp-group-title">
+            {p.collapsible === true && (p.collapsed === true ? '▸ ' : '▾ ')}
+            {str(p.title)}
+          </span>
         </div>
       )
     default:
